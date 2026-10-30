@@ -1,0 +1,13 @@
+#!/bin/sh
+# 커밋 메시지에서 AI 도구의 공동 작성자·생성 표시를 지웁니다.
+# 지운 뒤에도 남아 있으면 커밋을 막습니다. (처음 한 번: git config core.hooksPath .githooks)
+msg_file="$1"
+ai='(claude|anthropic|openai|chatgpt|gpt-?[0-9]|codex|copilot|cursor|gemini|jules|aider|windsurf|codeium|devin|\[bot\])'
+tmp="$msg_file.tmp"
+grep -viE "^[[:space:]]*(co-authored-by|generated[- ]by|generated with|made[- ]with|assisted[- ]by|written[- ]by)[: ].*$ai" "$msg_file" \
+  | grep -viE "generated with .*$ai" \
+  | git stripspace > "$tmp" && mv "$tmp" "$msg_file"
+if grep -qiE "(co-authored-by|generated|made[- ]with|assisted[- ]by).*$ai" "$msg_file"; then
+  echo "commit-msg: AI 도구 공동 작성자·생성 표시가 남아 있어 커밋을 막았습니다. 메시지를 고쳐 다시 커밋해 주세요." >&2
+  exit 1
+fi

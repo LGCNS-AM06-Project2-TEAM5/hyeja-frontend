@@ -1,0 +1,47 @@
+name: Commit Check
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  commit-check:
+    name: commit-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check commit messages and authors
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          ai='(claude|anthropic|openai|chatgpt|gpt-?[0-9]|codex|copilot|cursor|gemini|jules|aider|windsurf|codeium|devin|\[bot\])'
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BASE" 2>/dev/null; then
+            range="$HEAD"
+          else
+            range="$BASE..$HEAD"
+          fi
+          bad=0
+          for c in $(git rev-list "$range"); do
+            msg=$(git log -1 --format=%B "$c")
+            who=$(git log -1 --format='%an <%ae> / %cn <%ce>' "$c")
+            if echo "$msg" | grep -qiE "(co-authored-by|generated|made[- ]with|assisted[- ]by|written[- ]by).*$ai"; then
+              echo "::error::$c 커밋 메시지에 AI 도구 표시가 있습니다."; bad=1
+            fi
+            if echo "$who" | grep -qiE "$ai"; then
+              echo "::error::$c 작성자 또는 커미터가 AI 도구입니다: $who"; bad=1
+            fi
+          done
+          if [ "$bad" -ne 0 ]; then
+            echo "커밋 메시지에서 AI 도구 표시를 지우고 다시 올려 주세요 (git commit --amend 또는 git rebase -i)."
+            exit 1
+          fi
+          echo "확인 완료: AI 도구 표시가 없습니다."
