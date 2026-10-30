@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180" fill="none">
+  <circle cx="120" cy="92" r="76" fill="#E5F7EE"/>
+  <circle cx="34" cy="46" r="6" fill="#9BE3BF"/>
+  <circle cx="212" cy="136" r="5" fill="#C3BDF5"/>
+  <path d="M52 160 c0-26 16-42 38-42 s38 16 38 42z" fill="#786CFF"/>
+  <path d="M80 118 c4 8 16 8 20 0" stroke="#5143BD" stroke-width="3" stroke-linecap="round"/>
+  <rect x="84" y="102" width="12" height="16" rx="4" fill="#EAB38E"/>
+  <circle cx="90" cy="86" r="22" fill="#F7C8A5"/>
+  <path d="M66 88 c-4-22 10-32 26-32 c14 0 26 10 22 30 c-2-10-10-16-18-14 c-10 2-20 6-30 16z" fill="#2B2452"/>
+  <path d="M110 70 c6 8 6 22 2 32" stroke="#2B2452" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="83" cy="90" r="2" fill="#2B2452"/>
+  <circle cx="98" cy="90" r="2" fill="#2B2452"/>
+  <path d="M85 98 c3 3 8 3 11 0" stroke="#C9776A" stroke-width="2" stroke-linecap="round"/>
+  <g transform="rotate(6 166 98)">
+    <rect x="132" y="56" width="68" height="88" rx="10" fill="#fff" stroke="#E4E2EF" stroke-width="2"/>
+    <rect x="152" y="50" width="28" height="12" rx="6" fill="#231D45"/>
+    <rect x="144" y="74" width="12" height="12" rx="3" fill="#E5F7EE"/>
+    <path d="M147 80 l2.5 2.5 l4.5-5" stroke="#0F7A45" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="162" y="77" width="26" height="6" rx="3" fill="#E4E2EF"/>
+    <rect x="144" y="96" width="12" height="12" rx="3" fill="#E5F7EE"/>
+    <path d="M147 102 l2.5 2.5 l4.5-5" stroke="#0F7A45" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="162" y="99" width="20" height="6" rx="3" fill="#E4E2EF"/>
+    <rect x="144" y="118" width="12" height="12" rx="3" fill="#EFEDFF"/>
+    <rect x="162" y="121" width="24" height="6" rx="3" fill="#EFEDFF"/>
+  </g>
+  <g transform="rotate(40 204 70)">
+    <rect x="198" y="40" width="12" height="44" rx="3" fill="#FFD29D"/>
+    <path d="M198 84 h12 l-6 12z" fill="#F7C8A5"/>
+    <rect x="198" y="36" width="12" height="8" rx="3" fill="#FF8A8A"/>
+  </g>
+</svg>
