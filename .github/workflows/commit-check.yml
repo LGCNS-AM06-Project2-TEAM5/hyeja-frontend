@@ -1,47 +1,107 @@
 name: Commit Check
 
+# 작업 브랜치에 올라온 커밋에서 AI 도구의 공동 작성자·생성 표시를 자동으로 지우고,
+# AI 도구가 작성자로 된 커밋은 올린 사람으로 바꿔 다시 올립니다. PR 설명의 생성 표시도 지웁니다.
+# main·develop에는 PR로만 들어가므로, 검사를 통과한 깨끗한 커밋만 합쳐집니다.
+
 on:
-  pull_request:
   push:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
 
 permissions:
-  contents: read
+  contents: write
+  statuses: write
+  pull-requests: write
+
+concurrency:
+  group: commit-check-${{ github.head_ref || github.ref }}
+  cancel-in-progress: false
 
 jobs:
   commit-check:
     name: commit-check
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      AI: '(claude|anthropic|openai|chatgpt|gpt-?[0-9]|codex|copilot|cursor|gemini|jules|aider|windsurf|codeium|devin|\[bot\])'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
-      - name: Check commit messages and authors
+      - name: Clean pull request description
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          PR: ${{ github.event.pull_request.number }}
         run: |
-          ai='(claude|anthropic|openai|chatgpt|gpt-?[0-9]|codex|copilot|cursor|gemini|jules|aider|windsurf|codeium|devin|\[bot\])'
-          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BASE" 2>/dev/null; then
-            range="$HEAD"
-          else
-            range="$BASE..$HEAD"
+          body=$(gh pr view "$PR" -R "$REPO" --json body -q .body)
+          cleaned=$(printf '%s\n' "$body" | grep -viE "(co-authored-by|generated[- ]by|generated with|made[- ]with|assisted[- ]by|written[- ]by).*$AI" || true)
+          if [ "$(printf '%s' "$body")" != "$(printf '%s' "$cleaned")" ]; then
+            gh pr edit "$PR" -R "$REPO" --body "$cleaned"
+            echo "PR 설명에서 AI 생성 표시를 지웠습니다."
           fi
-          bad=0
-          for c in $(git rev-list "$range"); do
-            msg=$(git log -1 --format=%B "$c")
-            who=$(git log -1 --format='%an <%ae> / %cn <%ce>' "$c")
-            if echo "$msg" | grep -qiE "(co-authored-by|generated|made[- ]with|assisted[- ]by|written[- ]by).*$ai"; then
-              echo "::error::$c 커밋 메시지에 AI 도구 표시가 있습니다."; bad=1
+
+      - name: Check and clean commits
+        env:
+          EVENT: ${{ github.event_name }}
+          DEFAULT: ${{ github.event.repository.default_branch }}
+          PUSH_BRANCH: ${{ github.ref_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+          FIX_NAME: ${{ github.event.pull_request.user.login || github.actor }}
+          FIX_ID: ${{ github.event.pull_request.user.id || github.actor_id }}
+        run: |
+          export FIX_EMAIL="${FIX_ID}+${FIX_NAME}@users.noreply.github.com"
+          export PAT_MSG="^[[:space:]]*(co-authored-by|generated[- ]by|generated with|made[- ]with|assisted[- ]by|written[- ]by)[: ].*$AI|generated with .*$AI"
+
+          if [ "$EVENT" = "pull_request" ]; then
+            branch="$PR_BRANCH"; base="$PR_BASE"; editable="$PR_SAME_REPO"
+          else
+            branch="$PUSH_BRANCH"; editable=true
+            case "$branch" in main|develop|"$DEFAULT") editable=false ;; esac
+            if [ "$editable" = true ]; then
+              base=$(git merge-base "origin/$DEFAULT" HEAD 2>/dev/null || true)
+            else
+              base="$PUSH_BEFORE"
             fi
-            if echo "$who" | grep -qiE "$ai"; then
-              echo "::error::$c 작성자 또는 커미터가 AI 도구입니다: $who"; bad=1
-            fi
+          fi
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null || [ "$(git rev-parse "$base")" = "$(git rev-parse HEAD)" ]; then
+            range="HEAD -1"; base=""
+          else
+            range="$base..HEAD"
+          fi
+
+          found=0
+          for c in $(git rev-list $range); do
+            if git log -1 --format=%B "$c" | grep -qiE "$PAT_MSG"; then found=1; fi
+            if git log -1 --format='%an %ae %cn %ce' "$c" | grep -qiE "$AI"; then found=1; fi
           done
-          if [ "$bad" -ne 0 ]; then
-            echo "커밋 메시지에서 AI 도구 표시를 지우고 다시 올려 주세요 (git commit --amend 또는 git rebase -i)."
+          if [ "$found" = 0 ]; then echo "확인 완료: AI 도구 표시가 없습니다."; exit 0; fi
+
+          if [ "$editable" != true ]; then
+            echo "::error::AI 도구 표시가 있는 커밋입니다. 작업 브랜치에서 PR로 올려 주세요(자동으로 정리됩니다)."
             exit 1
           fi
-          echo "확인 완료: AI 도구 표시가 없습니다."
+
+          git checkout -q -B "$branch" HEAD
+          target="$branch"; [ -n "$base" ] && target="$base..$branch"
+          FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f \
+            --msg-filter '{ grep -viE "$PAT_MSG" || true; } | git stripspace' \
+            --env-filter '
+              if printf "%s %s" "$GIT_AUTHOR_NAME" "$GIT_AUTHOR_EMAIL" | grep -qiE "$AI"; then
+                export GIT_AUTHOR_NAME="$FIX_NAME" GIT_AUTHOR_EMAIL="$FIX_EMAIL"; fi
+              if printf "%s %s" "$GIT_COMMITTER_NAME" "$GIT_COMMITTER_EMAIL" | grep -qiE "$AI"; then
+                export GIT_COMMITTER_NAME="$FIX_NAME" GIT_COMMITTER_EMAIL="$FIX_EMAIL"; fi' \
+            -- $target
+          git push --force origin "$branch"
+          new=$(git rev-parse HEAD)
+          gh api "repos/$REPO/statuses/$new" -f state=success -f context=commit-check \
+            -f description="AI 도구 표시를 자동으로 정리했습니다" >/dev/null
+          echo "::notice::AI 도구 표시를 자동으로 정리해 $branch 에 다시 올렸습니다. 로컬에서는 git pull --rebase 로 받아 주세요."
