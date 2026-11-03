@@ -23,7 +23,9 @@ import { server } from '../../msw/server';
 const openAdminPage = async () => {
   signInAs(TOKENS.ADMIN);
   const view = renderApp(ROUTES.ADMIN);
-  await screen.findByRole('heading', { name: '관리 · 정책 수집' }, { timeout: 5000 });
+  await screen.findByRole('heading', { name: '관리 · 운영 현황' }, { timeout: 5000 });
+
+  await view.user.click(screen.getByRole('tab', { name: '정책 수집' }));
 
   return view;
 };

@@ -20,13 +20,17 @@ import { server } from '../../msw/server';
 const openAdminPage = async () => {
   signInAs(TOKENS.ADMIN);
   const view = renderApp(ROUTES.ADMIN);
-  await screen.findByRole('heading', { name: '관리 · 정책 수집' }, { timeout: 5000 });
+  await screen.findByRole('heading', { name: '관리 · 운영 현황' }, { timeout: 5000 });
+
+  await view.user.click(screen.getByRole('tab', { name: '이벤트 동기화' }));
 
   return view;
 };
 
 const findEventCard = async () => {
-  const title = await screen.findByText('이벤트 동기화');
+  const title = await within(screen.getByRole('tabpanel', { name: '이벤트 동기화' })).findByText(
+    '이벤트 동기화',
+  );
 
   return title.closest('.MuiCard-root');
 };
