@@ -23,6 +23,7 @@ import {
   NOTIFICATION_LIST,
   REGION_LIST_RESPONSE,
   POLICY_SEARCH_RESULT,
+  POLICY_EVENT_STATUS_RESPONSE,
   POLICY_SYNC_RESPONSE,
   TERM_LIST_RESPONSE,
   TOKENS,
@@ -189,5 +190,9 @@ export const handlers = [
   http.post(
     apiUrl(ENDPOINTS.ADMIN.POLICY_SYNC),
     withUser(() => ok(POLICY_SYNC_RESPONSE)),
+  ),
+  http.get(
+    apiUrl(ENDPOINTS.ADMIN.POLICY_EVENTS),
+    withUser(() => ok(POLICY_EVENT_STATUS_RESPONSE)),
   ),
 ];

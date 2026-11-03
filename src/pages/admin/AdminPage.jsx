@@ -6,6 +6,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 
 import * as adminApi from '@/api/adminApi';
+import PolicyEventStatusCard from '@/components/admin/PolicyEventStatusCard';
 import AppIcon from '@/components/common/AppIcon';
 import { TOAST_MESSAGES } from '@/constants/messages';
 import { useToast } from '@/hooks/useToast';
@@ -113,6 +114,7 @@ function AdminPage() {
           </Stack>
         </Card>
       )}
+      <PolicyEventStatusCard />
     </Stack>
   );
 }
