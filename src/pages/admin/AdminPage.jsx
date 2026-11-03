@@ -60,26 +60,33 @@ function AdminPage() {
 
   useEffect(() => {
     let isActive = true;
-    const load = async () => {
-      const [metrics, events] = await Promise.allSettled([
-        getServiceStatus(),
-        adminApi.getPolicyEventStatus(),
-      ]);
+    const update = (result) => {
       if (isActive) {
-        setMonitoring({
-          metrics:
-            metrics.status === 'fulfilled'
-              ? metrics.value
-              : { up: null, rate: null, latency: null, errors: null, requests: null, feign: null },
-          pending:
-            events.status === 'fulfilled' && Number.isFinite(events.value?.pendingCount)
-              ? events.value.pendingCount
-              : null,
-          isLoading: false,
-        });
+        setMonitoring((previous) => ({ ...previous, ...result }));
       }
     };
-    load();
+    getServiceStatus().then(
+      (metrics) => update({ metrics, isLoading: false }),
+      () =>
+        update({
+          metrics: {
+            up: null,
+            rate: null,
+            latency: null,
+            errors: null,
+            requests: null,
+            feign: null,
+          },
+          isLoading: false,
+        }),
+    );
+    adminApi.getPolicyEventStatus().then(
+      (events) =>
+        update({
+          pending: Number.isFinite(events?.pendingCount) ? events.pendingCount : null,
+        }),
+      () => update({ pending: null }),
+    );
     return () => {
       isActive = false;
     };
