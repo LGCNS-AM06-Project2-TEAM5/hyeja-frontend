@@ -444,6 +444,8 @@ export const POLICY_SYNC_STOPPED_RESPONSE = {
 
 /** 단계 0에서 확인한 쿼리와 vector 응답. 브라우저의 Prometheus 요청을 재현한다. */
 export const PROMETHEUS_QUERIES = {
+  feign:
+    'sum by (application, clientName, http_status_code, error) (increase(http_client_requests_seconds_count{clientName!=""}[5m]))',
   up: 'up{job="hyeja-services"}',
   rate: 'hyeja:http_requests:rate5m',
   latency: 'hyeja:http_latency_seconds:p95',
@@ -453,6 +455,53 @@ export const PROMETHEUS_QUERIES = {
 };
 const vector = (metric, value) => ({ metric, value: [1793710800, String(value)] });
 export const PROMETHEUS_RESULTS = {
+  [PROMETHEUS_QUERIES.feign]: [
+    vector(
+      {
+        application: 'policy-service',
+        clientName: 'com.hyeja.policyservice.client.user.UserClient',
+        http_status_code: '200',
+        error: 'none',
+      },
+      12,
+    ),
+    vector(
+      {
+        application: 'policy-service',
+        clientName: 'com.hyeja.policyservice.client.user.UserClient',
+        http_status_code: '503',
+        error: 'RetryableException',
+      },
+      3,
+    ),
+    vector(
+      {
+        application: 'policy-service',
+        clientName: 'com.hyeja.policyservice.client.user.UserClient',
+        http_status_code: '-1',
+        error: 'RetryableException',
+      },
+      2,
+    ),
+    vector(
+      {
+        application: 'policy-service',
+        clientName: 'com.hyeja.policyservice.client.user.UserClient',
+        http_status_code: '404',
+        error: 'none',
+      },
+      2,
+    ),
+    vector(
+      {
+        application: 'policy-service',
+        clientName: 'com.hyeja.policyservice.client.engagement.EngagementClient',
+        http_status_code: '200',
+        error: 'none',
+      },
+      8,
+    ),
+  ],
   [PROMETHEUS_QUERIES.up]: [
     'gateway-service:8000',
     'user-service:8081',
