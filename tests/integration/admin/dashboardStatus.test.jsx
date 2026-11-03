@@ -161,11 +161,11 @@ describe('관리자 운영 현황', () => {
     );
     const view = await openDashboard();
     await screen.findByText('4 / 5 정상');
-    expect(queries).toHaveBeenCalledTimes(6);
+    expect(queries).toHaveBeenCalledTimes(8);
     await act(() => vi.advanceTimersByTimeAsync(15000));
-    await waitFor(() => expect(queries).toHaveBeenCalledTimes(12));
+    await waitFor(() => expect(queries).toHaveBeenCalledTimes(16));
     view.unmount();
     await act(() => vi.advanceTimersByTimeAsync(15000));
-    expect(queries).toHaveBeenCalledTimes(12);
+    expect(queries).toHaveBeenCalledTimes(16);
   });
 });

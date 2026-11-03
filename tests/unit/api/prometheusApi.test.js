@@ -6,6 +6,7 @@ import {
   toGatewaySummary,
   toServiceRows,
   toFeignRows,
+  toPolicyPipeline,
 } from '@/api/prometheusApi';
 
 vi.mock('axios', () => ({ default: { get: vi.fn() } }));
@@ -92,7 +93,7 @@ describe('Prometheus 조회', () => {
     });
     const status = await getServiceStatus();
     expect(status.latency[0].value).toBe(0.061);
-    expect(axios.get).toHaveBeenCalledTimes(6);
+    expect(axios.get).toHaveBeenCalledTimes(8);
     expect(axios.get).toHaveBeenCalledWith('http://monitoring.test/api/v1/query', {
       params: { query: 'up{job="hyeja-services"}' },
       timeout: 8000,
@@ -238,5 +239,35 @@ describe('서비스 간 호출 집계', () => {
     [undefined, undefined],
   ])('상태·오류 정보가 불완전하면 실패 수를 측정 전으로 표시한다', (status, error) => {
     expect(f6([sample(status, error, 5)]).failures).toBe('측정 전');
+  });
+});
+
+describe('policy-updated 처리 건수', () => {
+  it('반영·중복 무시·DLT를 각각 보여 주고 0건은 0건으로 둔다', () => {
+    expect(
+      toPolicyPipeline({
+        policyEvents: [
+          { metric: { result: 'applied' }, value: 12 },
+          { metric: { result: 'duplicate' }, value: 0 },
+        ],
+        policyDlt: [{ metric: {}, value: 1 }],
+      }),
+    ).toEqual({ applied: '12건', duplicate: '0건', dlt: '1건', hasDlt: true });
+  });
+
+  it('지표가 아직 없으면 측정 전, 조회가 실패하면 불러오지 못했어요로 구분한다', () => {
+    expect(toPolicyPipeline({ policyEvents: [], policyDlt: [] })).toEqual({
+      applied: '측정 전',
+      duplicate: '측정 전',
+      dlt: '측정 전',
+      hasDlt: false,
+    });
+    expect(toPolicyPipeline({ policyEvents: null, policyDlt: null })).toEqual({
+      applied: '불러오지 못했어요',
+      duplicate: '불러오지 못했어요',
+      dlt: '불러오지 못했어요',
+      hasDlt: false,
+    });
+    expect(toPolicyPipeline(null).applied).toBe('측정 전');
   });
 });

@@ -16,6 +16,9 @@ const QUERIES = {
   errors: 'hyeja:http_5xx:ratio5m',
   requests:
     'sum by (spring_cloud_gateway_route_id, http_status_code) (increase(http_client_requests_seconds_count{application="gateway-service", spring_cloud_gateway_route_id!=""}[5m]))',
+  // engagement가 직접 세는 값이다. listener 기본 지표는 재시도마다 실패가 늘어 DLT 건수와 다르다.
+  policyEvents: 'sum by (result) (hyeja_policy_updated_events_total)',
+  policyDlt: 'sum(hyeja_policy_updated_dlt_total)',
 };
 const FAILED = '불러오지 못했어요';
 const MEASURING = '측정 중';
@@ -184,3 +187,25 @@ export const toFeignRows = (series) =>
     }
     return { id, source, target, calls, failures, hasFailures, p95: '측정 전' };
   });
+
+const NOT_MEASURED = '측정 전';
+
+const formatCount = (series, pick) => {
+  if (series === null) return FAILED;
+  const sample = Array.isArray(series) ? series.find(pick) : undefined;
+  return Number.isFinite(sample?.value)
+    ? `${Math.round(sample.value).toLocaleString('ko-KR')}건`
+    : NOT_MEASURED;
+};
+
+/** engagement 시작 이후 누적값이다. 지표가 아직 없으면(이벤트를 한 번도 안 받았거나 재시작) 측정 전으로 둔다. */
+export const toPolicyPipeline = (metrics) => {
+  const dltSample = Array.isArray(metrics?.policyDlt) ? metrics.policyDlt[0] : undefined;
+
+  return {
+    applied: formatCount(metrics?.policyEvents, ({ metric }) => metric.result === 'applied'),
+    duplicate: formatCount(metrics?.policyEvents, ({ metric }) => metric.result === 'duplicate'),
+    dlt: formatCount(metrics?.policyDlt, () => true),
+    hasDlt: Number.isFinite(dltSample?.value) && dltSample.value > 0,
+  };
+};
