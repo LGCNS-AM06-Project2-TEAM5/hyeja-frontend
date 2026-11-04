@@ -7,12 +7,60 @@ import {
   toServiceRows,
   toFeignRows,
   toPolicyPipeline,
+  toResilienceRows,
 } from '@/api/prometheusApi';
 
 vi.mock('axios', () => ({ default: { get: vi.fn() } }));
 afterEach(() => {
   vi.resetAllMocks();
   vi.unstubAllEnvs();
+});
+
+describe('장애 대응 시나리오', () => {
+  const metrics = (up) => ({
+    up: [{ metric: { instance: 'user-service:8081' }, value: up }],
+    policyEvents: [{ metric: { result: 'duplicate' }, value: 3 }],
+    policyDlt: [{ metric: {}, value: 1 }],
+  });
+
+  it('user 중단이면 대체 응답, up 1이면 정상으로 표시한다', () => {
+    expect(toResilienceRows(metrics(0), { pendingCount: 0 })[0]).toMatchObject({
+      now: '대체 응답 중',
+      tone: 'warning',
+    });
+    expect(toResilienceRows(metrics(1), { pendingCount: 0 })[0]).toMatchObject({
+      now: '정상',
+      tone: undefined,
+    });
+  });
+
+  it('보내기 대기와 정상, 조회 실패, 초기 로딩을 구분한다', () => {
+    expect(toResilienceRows({}, { pendingCount: 2 })[1]).toMatchObject({
+      now: '보내기 대기 2건',
+      tone: 'warning',
+    });
+    expect(toResilienceRows({}, { pendingCount: 0 })[1]).toMatchObject({
+      now: '정상',
+      tone: undefined,
+    });
+    expect(toResilienceRows({}, null)[1].now).toBe('불러오지 못했어요');
+    expect(toResilienceRows({}, undefined)[1].now).toBe('불러오는 중…');
+  });
+
+  it('중복과 실제 DLT 건수를 쓰고 DLT가 있으면 오류로 표시한다', () => {
+    const rows = toResilienceRows(metrics(1), { pendingCount: 0 });
+    expect(rows[2]).toMatchObject({ now: '중복 무시 3건', tone: undefined });
+    expect(rows[3]).toMatchObject({ now: 'DLT 1건', tone: 'error' });
+  });
+
+  it('빈 지표와 알 수 없는 up을 정상이나 0건으로 바꾸지 않는다', () => {
+    const rows = toResilienceRows({ up: [], policyEvents: [], policyDlt: [] });
+    expect(rows).toHaveLength(4);
+    expect(rows[0].now).toBe('측정 중');
+    expect(rows[2].now).toBe('중복 무시 측정 전');
+    expect(rows[3]).toMatchObject({ now: 'DLT 측정 전', tone: undefined });
+    expect(toResilienceRows(metrics(null))[0].now).toBe('측정 중');
+  });
 });
 
 describe('운영 지표 변환', () => {

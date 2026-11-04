@@ -20,10 +20,12 @@ import {
   toServiceRows,
   toFeignRows,
   toPolicyPipeline,
+  toResilienceRows,
 } from '@/api/prometheusApi';
 import EventPipeline from '@/components/admin/EventPipeline';
 import PolicyEventStatusCard from '@/components/admin/PolicyEventStatusCard';
 import AppIcon from '@/components/common/AppIcon';
+import { ADMIN_TROUBLESHOOTING } from '@/constants/adminTroubleshooting';
 import { TOAST_MESSAGES } from '@/constants/messages';
 import { useToast } from '@/hooks/useToast';
 import { getErrorMessage } from '@/utils/getErrorMessage';
@@ -117,6 +119,7 @@ function AdminPage() {
       : null;
   const pipeline = toPolicyPipeline(monitoring.metrics);
   const events = monitoring.events;
+  const prometheusUrl = import.meta.env.VITE_PROMETHEUS_URL?.trim();
   const outboxDetail =
     events === undefined
       ? '불러오는 중…'
@@ -204,7 +207,6 @@ function AdminPage() {
               id={`admin-tab-${index}`}
               aria-controls={`admin-panel-${index}`}
               label={label}
-              disabled={index === 2}
             />
           ),
         )}
@@ -359,6 +361,121 @@ function AdminPage() {
               isLoading={monitoring.isLoading}
               onReload={reload}
             />
+          </Stack>
+        )}
+      </Box>
+      <Box role="tabpanel" id="admin-panel-2" aria-labelledby="admin-tab-2" hidden={tab !== 2}>
+        {tab === 2 && (
+          <Stack spacing={3}>
+            <Card variant="outlined" sx={{ p: 2 }}>
+              <Stack spacing={2}>
+                <Box>
+                  <Typography variant="subtitle1">장애 대응 시나리오</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    장애를 일부러 내면 이 표의 '지금' 칸이 바뀌어요.
+                  </Typography>
+                </Box>
+                <Box sx={{ overflowX: 'auto' }}>
+                  <Table size="small" aria-label="장애 대응 시나리오">
+                    <TableHead>
+                      <TableRow>
+                        {['상황', '우리가 만든 대응', '지금'].map((label) => (
+                          <TableCell key={label}>{label}</TableCell>
+                        ))}
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {toResilienceRows(monitoring.metrics, events).map((row) => (
+                        <TableRow key={row.situation}>
+                          <TableCell component="th" scope="row">
+                            {row.situation}
+                          </TableCell>
+                          <TableCell>{row.response}</TableCell>
+                          <TableCell sx={{ color: row.tone ? `${row.tone}.main` : 'text.primary' }}>
+                            {row.now}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </Box>
+              </Stack>
+            </Card>
+            <Card variant="outlined" sx={{ p: 2 }}>
+              <Stack spacing={2}>
+                <Box>
+                  <Typography variant="subtitle1">트러블 슈팅 기록</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    개발하면서 실제로 겪은 문제와 해결한 PR이에요.
+                  </Typography>
+                </Box>
+                <Box sx={{ overflowX: 'auto' }}>
+                  <Table size="small" aria-label="트러블 슈팅 기록">
+                    <TableHead>
+                      <TableRow>
+                        {['문제', '원인', '해결', 'PR'].map((label) => (
+                          <TableCell key={label}>{label}</TableCell>
+                        ))}
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {ADMIN_TROUBLESHOOTING.map((row) => (
+                        <TableRow key={row.problem}>
+                          <TableCell component="th" scope="row">
+                            {row.problem}
+                          </TableCell>
+                          <TableCell>{row.cause}</TableCell>
+                          <TableCell>{row.solution}</TableCell>
+                          <TableCell>
+                            <Stack direction="row" spacing={1}>
+                              {row.prs.map((number) => (
+                                <Typography
+                                  key={number}
+                                  component="a"
+                                  variant="body2"
+                                  href={`https://github.com/LGCNS-AM06-Project2-TEAM5/hyeja-msa/pull/${number}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  #{number}
+                                </Typography>
+                              ))}
+                            </Stack>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </Box>
+              </Stack>
+            </Card>
+            <Card variant="outlined" sx={{ p: 2 }}>
+              <Stack spacing={2}>
+                <Typography variant="subtitle1">바로가기</Typography>
+                <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                  {[
+                    ['Zipkin 추적', 'http://localhost:9411'],
+                    ['Eureka', 'http://localhost:8761'],
+                    [
+                      'GitHub Actions',
+                      'https://github.com/LGCNS-AM06-Project2-TEAM5/hyeja-msa/actions',
+                    ],
+                    ...(prometheusUrl ? [['Prometheus', prometheusUrl]] : []),
+                  ].map(([label, href]) => (
+                    <Button
+                      key={label}
+                      variant="outlined"
+                      component="a"
+                      href={href}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {label}
+                    </Button>
+                  ))}
+                </Stack>
+              </Stack>
+            </Card>
           </Stack>
         )}
       </Box>

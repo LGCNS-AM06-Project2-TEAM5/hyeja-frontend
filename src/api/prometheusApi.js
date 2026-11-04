@@ -209,3 +209,45 @@ export const toPolicyPipeline = (metrics) => {
     hasDlt: Number.isFinite(dltSample?.value) && dltSample.value > 0,
   };
 };
+
+export const toResilienceRows = (metrics, events) => {
+  const userUp = metrics?.up?.find(({ metric }) => metric.instance === 'user-service:8081')?.value;
+  const pipeline = toPolicyPipeline(metrics);
+  const pendingCount = events?.pendingCount;
+
+  return [
+    {
+      situation: 'user 서비스 중단',
+      response: '정책 화면은 비로그인 응답으로 계속 열려요 (연결 1초·응답 2초 제한)',
+      now: userUp === 0 ? '대체 응답 중' : userUp === 1 ? '정상' : MEASURING,
+      tone: userUp === 0 ? 'warning' : undefined,
+    },
+    {
+      situation: 'Kafka 중단',
+      response: '이벤트를 policy_outbox에 쌓아 두었다가 복구되면 이어서 보내요',
+      now:
+        events === null
+          ? FAILED
+          : events === undefined
+            ? '불러오는 중…'
+            : pendingCount === 0
+              ? '정상'
+              : Number.isFinite(pendingCount) && pendingCount >= 1
+                ? `보내기 대기 ${pendingCount}건`
+                : MEASURING,
+      tone: Number.isFinite(pendingCount) && pendingCount >= 1 ? 'warning' : undefined,
+    },
+    {
+      situation: '같은 이벤트가 두 번 옴',
+      response: 'eventId로 한 번만 반영해요',
+      now: `중복 무시 ${pipeline.duplicate}`,
+      tone: undefined,
+    },
+    {
+      situation: '처리할 수 없는 메시지',
+      response: '1초 간격으로 3번 더 시도하고 안 되면 DLT로 따로 모아요',
+      now: `DLT ${pipeline.dlt}`,
+      tone: pipeline.hasDlt ? 'error' : undefined,
+    },
+  ];
+};
