@@ -14,7 +14,7 @@ import { ROUTES } from '@/constants/routes';
 import { renderApp, signInAs } from '../../helpers/renderApp';
 import { TOKENS } from '../../msw/fixtures';
 
-const ADMIN_HEADING = '관리 · 정책 수집';
+const ADMIN_HEADING = '관리 · 운영 현황';
 
 describe('보호 경로 접근 제어', () => {
   it('비로그인으로 관심 정책에 들어가면 홈으로 보내고 로그인 모달을 연다', async () => {

@@ -23,7 +23,12 @@ import {
   NOTIFICATION_LIST,
   REGION_LIST_RESPONSE,
   POLICY_SEARCH_RESULT,
+  POLICY_EVENT_STATUS_RESPONSE,
   POLICY_SYNC_RESPONSE,
+  PROMETHEUS_RESULTS,
+  PROMETHEUS_TRENDS,
+  prometheusRangeResponse,
+  prometheusResponse,
   TERM_LIST_RESPONSE,
   TOKENS,
   USER_BY_TOKEN,
@@ -48,6 +53,16 @@ const withUser = (resolve) => (info) => {
 };
 
 export const handlers = [
+  http.get('http://monitoring.test/api/v1/query_range', ({ request }) =>
+    HttpResponse.json(
+      prometheusRangeResponse(PROMETHEUS_TRENDS[new URL(request.url).searchParams.get('query')]),
+    ),
+  ),
+  http.get('http://monitoring.test/api/v1/query', ({ request }) =>
+    HttpResponse.json(
+      prometheusResponse(PROMETHEUS_RESULTS[new URL(request.url).searchParams.get('query')] ?? []),
+    ),
+  ),
   http.post(apiUrl(ENDPOINTS.AUTH.LOGIN), async ({ request }) => {
     const body = await request.json();
 
@@ -189,5 +204,9 @@ export const handlers = [
   http.post(
     apiUrl(ENDPOINTS.ADMIN.POLICY_SYNC),
     withUser(() => ok(POLICY_SYNC_RESPONSE)),
+  ),
+  http.get(
+    apiUrl(ENDPOINTS.ADMIN.POLICY_EVENTS),
+    withUser(() => ok(POLICY_EVENT_STATUS_RESPONSE)),
   ),
 ];

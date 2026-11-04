@@ -10,7 +10,7 @@ import { expect, test } from '@playwright/test';
 import { ADMIN, MEMBER } from './support/accounts.js';
 import { loginFromHeader } from './support/actions.js';
 
-const ADMIN_HEADING = '관리 · 정책 수집';
+const ADMIN_HEADING = '관리 · 운영 현황';
 
 test('관리자는 정책 수집 화면에서 수집을 실행하고 결과를 본다', async ({ page }) => {
   await page.goto('/');
@@ -20,6 +20,7 @@ test('관리자는 정책 수집 화면에서 수집을 실행하고 결과를 �
   await page.goto('/admin');
   await expect(page.getByRole('heading', { name: ADMIN_HEADING })).toBeVisible();
 
+  await page.getByRole('tab', { name: '정책 수집' }).click();
   await page.getByRole('button', { name: '지금 수집 실행' }).click();
 
   await expect(page.getByText('정책 수집을 마쳤어요')).toBeVisible();

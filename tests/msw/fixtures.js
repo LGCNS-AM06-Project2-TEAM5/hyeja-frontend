@@ -396,6 +396,44 @@ export const POLICY_SYNC_RESPONSE = {
   result: '온통청년 주거 정책 142건 동기화가 완료되었습니다.',
 };
 
+/**
+ * 백엔드 GET /api/policies/admin/events 응답. policy_outbox의 대기·발행 건수와 최근 이벤트(최신순, 최대 10건)다.
+ * publishedAt이 null이면 아직 Kafka로 보내지 않은 이벤트다.
+ */
+export const POLICY_EVENT_STATUS_RESPONSE = {
+  isSuccess: true,
+  code: 'SUCCESS_001',
+  message: '성공입니다.',
+  result: {
+    pendingCount: 1,
+    publishedCount: 2,
+    lastPublishedAt: '2026-11-03T21:05:00',
+    recentEvents: [
+      {
+        eventId: 'event-3',
+        policyId: 'R2026110300003',
+        eventType: 'policy-updated',
+        createdAt: '2026-11-03T21:06:00',
+        publishedAt: null,
+      },
+      {
+        eventId: 'event-2',
+        policyId: 'R2026110300002',
+        eventType: 'policy-updated',
+        createdAt: '2026-11-03T21:04:00',
+        publishedAt: '2026-11-03T21:05:00',
+      },
+      {
+        eventId: 'event-1',
+        policyId: 'R2026110300001',
+        eventType: 'policy-updated',
+        createdAt: '2026-11-03T21:00:00',
+        publishedAt: '2026-11-03T21:01:00',
+      },
+    ],
+  },
+};
+
 /** 온통청년 API가 중간에 실패하면 502(POLICY_002)와 함께 멈춘 페이지·저장 건수를 준다. */
 export const POLICY_SYNC_STOPPED_RESPONSE = {
   isSuccess: false,
@@ -403,3 +441,123 @@ export const POLICY_SYNC_STOPPED_RESPONSE = {
   message: '온통청년 API 요청이 실패해 정책 수집이 중간에 멈췄어요. 잠시 후 다시 시도해 주세요.',
   result: { stoppedPage: 3, savedCount: 200 },
 };
+
+/** 단계 0에서 확인한 쿼리와 vector 응답. 브라우저의 Prometheus 요청을 재현한다. */
+export const PROMETHEUS_QUERIES = {
+  circuit: 'resilience4j_circuitbreaker_state',
+  circuitFailure: 'resilience4j_circuitbreaker_failure_rate',
+  heap: 'sum by (instance) (jvm_memory_used_bytes{area="heap"})',
+  feign:
+    'sum by (application, clientName, http_status_code, error) (increase(http_client_requests_seconds_count{clientName!=""}[5m]))',
+  up: 'up{job="hyeja-services"}',
+  rate: 'hyeja:http_requests:rate5m',
+  latency: 'hyeja:http_latency_seconds:p95',
+  errors: 'hyeja:http_5xx:ratio5m',
+  requests:
+    'sum by (spring_cloud_gateway_route_id, http_status_code) (increase(http_client_requests_seconds_count{application="gateway-service", spring_cloud_gateway_route_id!=""}[5m]))',
+  policyEvents: 'sum by (result) (hyeja_policy_updated_events_total)',
+  policyDlt: 'sum(hyeja_policy_updated_dlt_total)',
+};
+const vector = (metric, value) => ({ metric, value: [1793710800, String(value)] });
+export const PROMETHEUS_RESULTS = {
+  [PROMETHEUS_QUERIES.circuit]: [
+    vector({ name: 'recUserProfile', state: 'closed' }, 0),
+    vector({ name: 'recUserProfile', state: 'open' }, 1),
+    vector({ name: 'recPolicyCandidates', state: 'closed' }, 1),
+    vector({ name: 'recEngagementFavorites', state: 'half_open' }, 1),
+  ],
+  [PROMETHEUS_QUERIES.circuitFailure]: [
+    vector({ name: 'recUserProfile' }, 25),
+    vector({ name: 'recEngagementFavorites' }, -1),
+  ],
+  [PROMETHEUS_QUERIES.heap]: [vector({ instance: 'policy-service:8082' }, 512 * 1024 * 1024)],
+  [PROMETHEUS_QUERIES.feign]: [
+    vector(
+      {
+        application: 'policy-service',
+        clientName: 'com.hyeja.policyservice.client.user.UserClient',
+        http_status_code: '200',
+        error: 'none',
+      },
+      12,
+    ),
+    vector(
+      {
+        application: 'policy-service',
+        clientName: 'com.hyeja.policyservice.client.user.UserClient',
+        http_status_code: '503',
+        error: 'RetryableException',
+      },
+      3,
+    ),
+    vector(
+      {
+        application: 'policy-service',
+        clientName: 'com.hyeja.policyservice.client.user.UserClient',
+        http_status_code: '-1',
+        error: 'RetryableException',
+      },
+      2,
+    ),
+    vector(
+      {
+        application: 'policy-service',
+        clientName: 'com.hyeja.policyservice.client.user.UserClient',
+        http_status_code: '404',
+        error: 'none',
+      },
+      2,
+    ),
+    vector(
+      {
+        application: 'policy-service',
+        clientName: 'com.hyeja.policyservice.client.engagement.EngagementClient',
+        http_status_code: '200',
+        error: 'none',
+      },
+      8,
+    ),
+  ],
+  [PROMETHEUS_QUERIES.up]: [
+    'gateway-service:8000',
+    'user-service:8081',
+    'policy-service:8082',
+    'engagement-service:8083',
+    'recommendation-service:8084',
+  ].map((instance) => vector({ instance }, instance.startsWith('user-') ? 0 : 1)),
+  [PROMETHEUS_QUERIES.rate]: [vector({ application: 'policy-service' }, 2.1)],
+  [PROMETHEUS_QUERIES.latency]: [vector({ application: 'policy-service' }, 0.061)],
+  [PROMETHEUS_QUERIES.errors]: [vector({ application: 'policy-service' }, 0.025)],
+  [PROMETHEUS_QUERIES.requests]: [
+    vector({ spring_cloud_gateway_route_id: 'policy-service', http_status_code: '200' }, 98),
+    vector({ spring_cloud_gateway_route_id: 'policy-service', http_status_code: '500' }, 2),
+  ],
+  [PROMETHEUS_QUERIES.policyEvents]: [
+    vector({ result: 'applied' }, 12),
+    vector({ result: 'duplicate' }, 3),
+  ],
+  [PROMETHEUS_QUERIES.policyDlt]: [vector({}, 1)],
+};
+export const prometheusResponse = (result) => ({
+  status: 'success',
+  data: { resultType: 'vector', result },
+});
+
+export const PROMETHEUS_TRENDS = {
+  'hyeja:http_requests:rate5m{application="gateway-service"}': [
+    [0, '2'],
+    [30, '1.5'],
+  ],
+  'hyeja:http_latency_seconds:p95{application="gateway-service"}': [
+    [0, '0.246'],
+    [30, '0.123'],
+  ],
+  'hyeja:http_5xx:ratio5m{application="gateway-service"}': [
+    [0, '0.03'],
+    [30, '0.015'],
+  ],
+};
+export const prometheusRangeResponse = (values = []) => ({
+  status: 'success',
+  data: { resultType: 'matrix', result: [{ metric: {}, values }] },
+});

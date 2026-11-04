@@ -278,9 +278,17 @@ export const getCardNews = async ({ isAuthenticated = false, signal } = {}) => {
 export const getCardNewsDetail = async (policyId, { signal } = {}) =>
   toCardNewsDetail(await httpClient.get(ENDPOINTS.POLICY.CARD_NEWS_DETAIL(policyId), { signal }));
 
+// MSA에서는 Gateway → recommendation → user·policy·engagement → OpenAI를 거쳐 6~9초가 걸려 기본 10초에 자주 걸린다.
+const POLICY_SEARCH_TIMEOUT_MS = 30 * 1000;
+
 /** F-14: 백엔드 검색 API는 GET 쿼리스트링으로 검색어를 받고, 로그인이 필요하다. */
 export const searchPolicies = async ({ query }) =>
-  toPolicySearchResult(await httpClient.get(ENDPOINTS.POLICY.SEARCH, { params: { query } }));
+  toPolicySearchResult(
+    await httpClient.get(ENDPOINTS.POLICY.SEARCH, {
+      params: { query },
+      timeout: POLICY_SEARCH_TIMEOUT_MS,
+    }),
+  );
 
 export const getTerms = async ({ signal } = {}) =>
   toTermsList(await httpClient.get(ENDPOINTS.POLICY.TERMS, { signal }));
