@@ -1,4 +1,12 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import Box from '@mui/material/Box';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import Divider from '@mui/material/Divider';
@@ -6,6 +14,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 
 import * as adminApi from '@/api/adminApi';
+import { getServiceStatus, toGatewaySummary, toServiceRows } from '@/api/prometheusApi';
 import PolicyEventStatusCard from '@/components/admin/PolicyEventStatusCard';
 import AppIcon from '@/components/common/AppIcon';
 import { TOAST_MESSAGES } from '@/constants/messages';
@@ -31,6 +40,77 @@ function AdminPage() {
   const { showSuccess, showError, showInfo } = useToast();
   const [resultRows, setResultRows] = useState([]);
   const [isCollecting, setIsCollecting] = useState(false);
+  const [tab, setTab] = useState(0);
+  const [reloadToken, setReloadToken] = useState(0);
+  const [monitoring, setMonitoring] = useState({
+    metrics: undefined,
+    pending: undefined,
+    isLoading: true,
+  });
+
+  const reload = useCallback(() => {
+    setMonitoring((previous) => ({ ...previous, isLoading: true }));
+    setReloadToken((previous) => previous + 1);
+  }, []);
+
+  useEffect(() => {
+    let isActive = true;
+    const load = async () => {
+      const [metrics, events] = await Promise.allSettled([
+        getServiceStatus(),
+        adminApi.getPolicyEventStatus(),
+      ]);
+      if (isActive) {
+        setMonitoring({
+          metrics:
+            metrics.status === 'fulfilled'
+              ? metrics.value
+              : { up: null, rate: null, latency: null, errors: null, requests: null },
+          pending:
+            events.status === 'fulfilled' && Number.isFinite(events.value?.pendingCount)
+              ? events.value.pendingCount
+              : null,
+          isLoading: false,
+        });
+      }
+    };
+    load();
+    return () => {
+      isActive = false;
+    };
+  }, [reloadToken]);
+
+  useEffect(() => {
+    const timer = setInterval(reload, 15000);
+    return () => clearInterval(timer);
+  }, [reload]);
+
+  const rows = toServiceRows(monitoring.metrics);
+  const serviceCount = rows.every(({ status }) => status === '정상' || status === '중단')
+    ? `${rows.filter(({ status }) => status === '정상').length} / 5 정상`
+    : monitoring.metrics?.up === null
+      ? '불러오지 못했어요'
+      : '측정 중';
+  const [requestCount, errorRatio] = toGatewaySummary(monitoring.metrics?.requests);
+  const unavailable =
+    monitoring.metrics === undefined
+      ? '불러오는 중…'
+      : monitoring.metrics === null
+        ? '측정 전'
+        : null;
+  const summaries = [
+    ['서비스 상태', unavailable ?? serviceCount],
+    ['최근 5분 요청', unavailable ?? requestCount],
+    ['5xx 비율', unavailable ?? errorRatio],
+    [
+      '이벤트 보내기 대기',
+      monitoring.pending === undefined
+        ? '불러오는 중…'
+        : monitoring.pending === null
+          ? '불러오지 못했어요'
+          : `${monitoring.pending.toLocaleString('ko-KR')}건`,
+    ],
+  ];
 
   const handleCollect = async () => {
     setIsCollecting(true);
@@ -57,64 +137,175 @@ function AdminPage() {
   return (
     <Stack spacing={3}>
       <Stack spacing={0.5}>
-        <Typography variant="h1">관리 · 정책 수집</Typography>
+        <Typography variant="h1">관리 · 운영 현황</Typography>
         <Typography variant="body1" color="text.secondary">
-          온통청년에서 주거 정책을 바로 가져와요. 정책마다 AI 분석을 거쳐 몇 분 걸릴 수 있어요.
-          (role = ADMIN만 접근)
+          서비스 상태와 이벤트 흐름을 확인하고 주거 정책을 수집해요. (role = ADMIN만 접근)
         </Typography>
       </Stack>
 
-      <Card variant="outlined" sx={{ p: 2 }}>
-        <Stack
-          direction={{ xs: 'column', sm: 'row' }}
-          spacing={2}
-          sx={{ alignItems: { xs: 'flex-start', sm: 'center' } }}
-        >
-          <Button
-            variant="contained"
-            onClick={handleCollect}
-            disabled={isCollecting}
-            sx={{ flexShrink: 0 }}
-          >
-            {isCollecting ? '수집하는 중…' : '지금 수집 실행'}
-          </Button>
-          <Typography variant="body1" color="text.secondary">
-            온통청년 API <AppIcon name="arrow-right" size={14} /> 주거 정책 저장{' '}
-            <AppIcon name="arrow-right" size={14} /> 하위 유형 분류{' '}
-            <AppIcon name="arrow-right" size={14} /> 카드뉴스 생성
-          </Typography>
-        </Stack>
-      </Card>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', md: 'repeat(4, minmax(0, 1fr))' },
+          gap: 2,
+        }}
+      >
+        {summaries.map(([label, value]) => (
+          <Card key={label} variant="outlined" sx={{ p: 2, backgroundColor: 'grey.100' }}>
+            <Typography variant="body2" color="text.secondary">
+              {label}
+            </Typography>
+            <Typography variant="subtitle1" sx={{ mt: 0.5, overflowWrap: 'anywhere' }}>
+              {value}
+            </Typography>
+          </Card>
+        ))}
+      </Box>
+      <Typography variant="body2" color="text.secondary">
+        요청 수와 5xx 비율은 Gateway를 통과한 최근 5분 기준이에요.
+      </Typography>
 
-      {resultRows.length > 0 && (
-        <Card variant="outlined" sx={{ backgroundColor: 'grey.100' }}>
-          <Typography variant="body2" sx={{ px: 2, py: 1.5 }}>
-            마지막 수집 결과
-          </Typography>
-          <Stack divider={<Divider />}>
-            {resultRows.map((row) => (
-              <Stack
-                key={row.label}
-                direction={{ xs: 'column', sm: 'row' }}
-                spacing={{ xs: 0.5, sm: 2 }}
-                sx={{ px: 2, py: 1.5 }}
-              >
-                <Typography
-                  variant="body1"
-                  color="text.secondary"
-                  sx={{ width: { xs: 'auto', sm: 64 }, flexShrink: 0 }}
-                >
-                  {row.label}
+      <Tabs
+        value={tab}
+        onChange={(_event, value) => setTab(value)}
+        variant="scrollable"
+        scrollButtons="auto"
+        aria-label="관리자 대시보드"
+      >
+        {['운영 현황', '이벤트 동기화', '장애 대응·트러블 슈팅', '정책 수집'].map(
+          (label, index) => (
+            <Tab
+              key={label}
+              id={`admin-tab-${index}`}
+              aria-controls={`admin-panel-${index}`}
+              label={label}
+              disabled={index === 2}
+            />
+          ),
+        )}
+      </Tabs>
+
+      <Box role="tabpanel" id="admin-panel-0" aria-labelledby="admin-tab-0" hidden={tab !== 0}>
+        <Card variant="outlined" sx={{ p: 2 }}>
+          <Stack spacing={2}>
+            <Stack
+              direction="row"
+              spacing={2}
+              sx={{ justifyContent: 'space-between', alignItems: 'center' }}
+            >
+              <Box>
+                <Typography variant="subtitle1">서비스 상태</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  15초마다 갱신해요.
                 </Typography>
-                <Typography variant="body1" sx={{ minWidth: 0, overflowWrap: 'anywhere' }}>
-                  {row.value}
-                </Typography>
-              </Stack>
-            ))}
+              </Box>
+              <Button variant="outlined" onClick={reload} disabled={monitoring.isLoading}>
+                새로고침
+              </Button>
+            </Stack>
+            {monitoring.metrics === null ? (
+              <Typography color="text.secondary">모니터링 주소가 설정되지 않았어요</Typography>
+            ) : (
+              <Box sx={{ overflowX: 'auto' }}>
+                <Table size="small" aria-label="서비스 상태">
+                  <TableHead>
+                    <TableRow>
+                      {['서비스', '상태', '초당 요청', '응답 시간 p95', '5xx 비율'].map((label) => (
+                        <TableCell key={label}>{label}</TableCell>
+                      ))}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {rows.map((row) => (
+                      <TableRow key={row.name}>
+                        <TableCell component="th" scope="row">
+                          {row.name}
+                        </TableCell>
+                        <TableCell
+                          sx={{
+                            color:
+                              row.status === '정상'
+                                ? 'success.main'
+                                : row.status === '중단'
+                                  ? 'error.main'
+                                  : 'text.secondary',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {row.status}
+                        </TableCell>
+                        <TableCell>{row.rate}</TableCell>
+                        <TableCell>{row.latency}</TableCell>
+                        <TableCell>{row.errors}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Box>
+            )}
           </Stack>
         </Card>
-      )}
-      <PolicyEventStatusCard />
+      </Box>
+      <Box role="tabpanel" id="admin-panel-1" aria-labelledby="admin-tab-1" hidden={tab !== 1}>
+        {tab === 1 && <PolicyEventStatusCard />}
+      </Box>
+      <Box role="tabpanel" id="admin-panel-3" aria-labelledby="admin-tab-3" hidden={tab !== 3}>
+        <Stack spacing={3}>
+          <Typography variant="body1" color="text.secondary">
+            온통청년에서 주거 정책을 바로 가져와요. 수집에 몇 분 걸릴 수 있어요.
+          </Typography>
+          <Card variant="outlined" sx={{ p: 2 }}>
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }}
+              spacing={2}
+              sx={{ alignItems: { xs: 'flex-start', sm: 'center' } }}
+            >
+              <Button
+                variant="contained"
+                onClick={handleCollect}
+                disabled={isCollecting}
+                sx={{ flexShrink: 0 }}
+              >
+                {isCollecting ? '수집하는 중…' : '지금 수집 실행'}
+              </Button>
+              <Typography variant="body1" color="text.secondary">
+                온통청년 API <AppIcon name="arrow-right" size={14} /> 주거 정책 저장{' '}
+                <AppIcon name="arrow-right" size={14} /> 하위 유형 분류{' '}
+                <AppIcon name="arrow-right" size={14} /> 카드뉴스 생성
+              </Typography>
+            </Stack>
+          </Card>
+
+          {resultRows.length > 0 && (
+            <Card variant="outlined" sx={{ backgroundColor: 'grey.100' }}>
+              <Typography variant="body2" sx={{ px: 2, py: 1.5 }}>
+                마지막 수집 결과
+              </Typography>
+              <Stack divider={<Divider />}>
+                {resultRows.map((row) => (
+                  <Stack
+                    key={row.label}
+                    direction={{ xs: 'column', sm: 'row' }}
+                    spacing={{ xs: 0.5, sm: 2 }}
+                    sx={{ px: 2, py: 1.5 }}
+                  >
+                    <Typography
+                      variant="body1"
+                      color="text.secondary"
+                      sx={{ width: { xs: 'auto', sm: 64 }, flexShrink: 0 }}
+                    >
+                      {row.label}
+                    </Typography>
+                    <Typography variant="body1" sx={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                      {row.value}
+                    </Typography>
+                  </Stack>
+                ))}
+              </Stack>
+            </Card>
+          )}
+        </Stack>
+      </Box>
     </Stack>
   );
 }

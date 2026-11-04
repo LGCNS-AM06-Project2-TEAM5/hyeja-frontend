@@ -441,3 +441,34 @@ export const POLICY_SYNC_STOPPED_RESPONSE = {
   message: '온통청년 API 요청이 실패해 정책 수집이 중간에 멈췄어요. 잠시 후 다시 시도해 주세요.',
   result: { stoppedPage: 3, savedCount: 200 },
 };
+
+/** 단계 0에서 확인한 쿼리와 vector 응답. 브라우저의 Prometheus 요청을 재현한다. */
+export const PROMETHEUS_QUERIES = {
+  up: 'up{job="hyeja-services"}',
+  rate: 'hyeja:http_requests:rate5m',
+  latency: 'hyeja:http_latency_seconds:p95',
+  errors: 'hyeja:http_5xx:ratio5m',
+  requests:
+    'sum by (spring_cloud_gateway_route_id, http_status_code) (increase(http_client_requests_seconds_count{application="gateway-service", spring_cloud_gateway_route_id!=""}[5m]))',
+};
+const vector = (metric, value) => ({ metric, value: [1793710800, String(value)] });
+export const PROMETHEUS_RESULTS = {
+  [PROMETHEUS_QUERIES.up]: [
+    'gateway-service:8000',
+    'user-service:8081',
+    'policy-service:8082',
+    'engagement-service:8083',
+    'recommendation-service:8084',
+  ].map((instance) => vector({ instance }, instance.startsWith('user-') ? 0 : 1)),
+  [PROMETHEUS_QUERIES.rate]: [vector({ application: 'policy-service' }, 2.1)],
+  [PROMETHEUS_QUERIES.latency]: [vector({ application: 'policy-service' }, 0.061)],
+  [PROMETHEUS_QUERIES.errors]: [vector({ application: 'policy-service' }, 0.025)],
+  [PROMETHEUS_QUERIES.requests]: [
+    vector({ spring_cloud_gateway_route_id: 'policy-service', http_status_code: '200' }, 98),
+    vector({ spring_cloud_gateway_route_id: 'policy-service', http_status_code: '500' }, 2),
+  ],
+};
+export const prometheusResponse = (result) => ({
+  status: 'success',
+  data: { resultType: 'vector', result },
+});

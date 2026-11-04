@@ -25,6 +25,8 @@ import {
   POLICY_SEARCH_RESULT,
   POLICY_EVENT_STATUS_RESPONSE,
   POLICY_SYNC_RESPONSE,
+  PROMETHEUS_RESULTS,
+  prometheusResponse,
   TERM_LIST_RESPONSE,
   TOKENS,
   USER_BY_TOKEN,
@@ -49,6 +51,11 @@ const withUser = (resolve) => (info) => {
 };
 
 export const handlers = [
+  http.get('http://monitoring.test/api/v1/query', ({ request }) =>
+    HttpResponse.json(
+      prometheusResponse(PROMETHEUS_RESULTS[new URL(request.url).searchParams.get('query')] ?? []),
+    ),
+  ),
   http.post(apiUrl(ENDPOINTS.AUTH.LOGIN), async ({ request }) => {
     const body = await request.json();
 
