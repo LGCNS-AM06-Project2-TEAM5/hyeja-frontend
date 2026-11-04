@@ -1,7 +1,12 @@
 import axios from 'axios';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { getServiceStatus, toGatewaySummary, toServiceRows } from '@/api/prometheusApi';
+import {
+  getServiceStatus,
+  toGatewaySummary,
+  toServiceRows,
+  toFeignRows,
+} from '@/api/prometheusApi';
 
 vi.mock('axios', () => ({ default: { get: vi.fn() } }));
 afterEach(() => {
@@ -87,7 +92,7 @@ describe('Prometheus 조회', () => {
     });
     const status = await getServiceStatus();
     expect(status.latency[0].value).toBe(0.061);
-    expect(axios.get).toHaveBeenCalledTimes(5);
+    expect(axios.get).toHaveBeenCalledTimes(6);
     expect(axios.get).toHaveBeenCalledWith('http://monitoring.test/api/v1/query', {
       params: { query: 'up{job="hyeja-services"}' },
       timeout: 8000,
@@ -135,5 +140,103 @@ describe('Prometheus 조회', () => {
     vi.stubEnv('VITE_PROMETHEUS_URL', 'http://monitoring.test');
     axios.get.mockResolvedValue({ data });
     expect((await getServiceStatus()).up).toBeNull();
+  });
+});
+
+describe('서비스 간 호출 집계', () => {
+  const sample = (
+    http_status_code,
+    error,
+    value = 1,
+    application = 'policy-service',
+    clientName = 'com.hyeja.policyservice.client.user.UserClient',
+  ) => ({
+    metric: {
+      application,
+      clientName,
+      http_status_code,
+      ...(error === undefined ? {} : { error }),
+    },
+    value,
+  });
+  const f6 = (data) => toFeignRows(data).find(({ id }) => id === 'F6');
+
+  it('5xx와 오류 라벨을 중복 없이 세고 4xx는 문서 기준대로 처리한다', () => {
+    expect(
+      f6([
+        sample('200', 'none', 12),
+        sample('503', 'RetryableException', 3),
+        sample('-1', 'RetryableException', 2),
+        sample('404', 'none', 2),
+      ]),
+    ).toMatchObject({ calls: '19건', failures: '5건', p95: '측정 전' });
+  });
+
+  it('양수인 추정 건수를 반올림해 0건으로 표시하지 않는다', () => {
+    expect(f6([sample('503', 'none', 0.2)])).toMatchObject({
+      calls: '1건 미만',
+      failures: '1건 미만',
+      hasFailures: true,
+    });
+    expect(f6([sample('200', 'none', 4)])).toMatchObject({ failures: '0건', hasFailures: false });
+  });
+
+  it('오류 라벨이 없으면 실패 0건으로 단정하지 않는다', () => {
+    expect(f6([sample('200', undefined, 5)])).toMatchObject({ calls: '5건', failures: '측정 전' });
+    expect(f6([sample('503', undefined, 2)])).toMatchObject({ calls: '2건', failures: '2건' });
+    expect(f6([sample('503', 'none', 2), sample('200', undefined, 5)]).failures).toBe('측정 전');
+  });
+
+  it('서비스와 클라이언트 전체 이름이 모두 맞는 표본만 더한다', () => {
+    expect(
+      f6([
+        sample('200', 'none', 4),
+        sample('200', 'none', 90, 'recommendation-service'),
+        sample('200', 'none', 80, 'policy-service', 'other.UserClient'),
+      ]).calls,
+    ).toBe('4건');
+    const flows = toFeignRows([]);
+    expect(flows.map(({ id }) => id)).toEqual(['F1', 'F2', 'F3', 'F4', 'F5', 'F6']);
+    expect(flows.find(({ id }) => id === 'F3')).toMatchObject({
+      source: 'recommendation',
+      target: 'engagement',
+    });
+    expect(flows.find(({ id }) => id === 'F4')).toMatchObject({
+      source: 'policy',
+      target: 'engagement',
+    });
+  });
+
+  it.each([{ samples: [] }, { samples: [sample('200', 'none', 0)] }])(
+    '빈 결과와 실제 0건은 최근 호출 없음으로 표시한다',
+    ({ samples }) => {
+      expect(f6(samples)).toMatchObject({ calls: '최근 호출 없음', failures: '—' });
+    },
+  );
+
+  it.each([null, NaN, Infinity, -1])('잘못된 숫자 %s는 0건으로 바꾸지 않는다', (value) => {
+    expect(f6([sample('200', 'none', value)])).toMatchObject({
+      calls: '측정 중',
+      failures: '측정 중',
+    });
+  });
+
+  it('조회 실패·초기 로딩을 구분하고 F5는 측정 전으로 남긴다', () => {
+    expect(f6(null)).toMatchObject({ calls: '불러오지 못했어요', failures: '불러오지 못했어요' });
+    expect(f6(undefined).calls).toBe('불러오는 중…');
+    expect(toFeignRows(null).find(({ id }) => id === 'F5')).toMatchObject({
+      calls: '측정 전',
+      failures: '측정 전',
+      p95: '측정 전',
+    });
+  });
+
+  it.each([
+    ['', 'none'],
+    ['200', ''],
+    ['200', ' '],
+    [undefined, undefined],
+  ])('상태·오류 정보가 불완전하면 실패 수를 측정 전으로 표시한다', (status, error) => {
+    expect(f6([sample(status, error, 5)]).failures).toBe('측정 전');
   });
 });

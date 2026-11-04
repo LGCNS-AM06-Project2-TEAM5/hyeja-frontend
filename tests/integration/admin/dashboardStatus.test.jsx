@@ -20,7 +20,8 @@ const openDashboard = async () => {
   await screen.findByRole('heading', { name: '관리 · 운영 현황' }, { timeout: 2000 });
   return view;
 };
-const policyRow = () => screen.getByRole('row', { name: /policy-service/ });
+const serviceTable = () => within(screen.getByRole('table', { name: '서비스 상태' }));
+const policyRow = () => serviceTable().getByRole('row', { name: /policy-service/ });
 
 beforeEach(() => vi.stubEnv('VITE_PROMETHEUS_URL', 'http://monitoring.test'));
 afterEach(() => {
@@ -42,7 +43,7 @@ describe('관리자 운영 현황', () => {
     expect(row.getByText('61ms')).toBeInTheDocument();
     expect(row.getByText('2.5%')).toBeInTheDocument();
     expect(
-      within(screen.getByRole('row', { name: /user-service/ })).getByText('중단'),
+      within(serviceTable().getByRole('row', { name: /user-service/ })).getByText('중단'),
     ).toBeInTheDocument();
   });
 
@@ -112,11 +113,11 @@ describe('관리자 운영 현황', () => {
     );
     const view = await openDashboard();
     await screen.findByText('4 / 5 정상');
-    expect(queries).toHaveBeenCalledTimes(5);
+    expect(queries).toHaveBeenCalledTimes(6);
     await act(() => vi.advanceTimersByTimeAsync(15000));
-    await waitFor(() => expect(queries).toHaveBeenCalledTimes(10));
+    await waitFor(() => expect(queries).toHaveBeenCalledTimes(12));
     view.unmount();
     await act(() => vi.advanceTimersByTimeAsync(15000));
-    expect(queries).toHaveBeenCalledTimes(10);
+    expect(queries).toHaveBeenCalledTimes(12);
   });
 });

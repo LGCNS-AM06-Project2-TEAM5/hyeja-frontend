@@ -8,6 +8,8 @@ const SERVICES = [
   ['recommendation-service', 'recommendation-service:8084'],
 ];
 const QUERIES = {
+  feign:
+    'sum by (application, clientName, http_status_code, error) (increase(http_client_requests_seconds_count{clientName!=""}[5m]))',
   up: 'up{job="hyeja-services"}',
   rate: 'hyeja:http_requests:rate5m',
   latency: 'hyeja:http_latency_seconds:p95',
@@ -113,3 +115,72 @@ export const toGatewaySummary = (requests) => {
     `${(total > 0 ? (failed / total) * 100 : 0).toFixed(1)}%`,
   ];
 };
+
+const RECOMMENDATION_CLIENT = 'com.hyeja.recommendationservice';
+const POLICY_CLIENT = 'com.hyeja.policyservice.client';
+const CALL_FLOWS = [
+  [
+    'F1',
+    'recommendation',
+    'user',
+    `${RECOMMENDATION_CLIENT}.profile.client.UserProfileFeignClient`,
+  ],
+  [
+    'F2',
+    'recommendation',
+    'policy',
+    `${RECOMMENDATION_CLIENT}.policy.client.PolicyCandidateFeignClient`,
+  ],
+  [
+    'F3',
+    'recommendation',
+    'engagement',
+    `${RECOMMENDATION_CLIENT}.favorite.client.FavoriteFeignClient`,
+  ],
+  ['F4', 'policy', 'engagement', `${POLICY_CLIENT}.engagement.EngagementClient`],
+  ['F5', 'engagement', 'policy', null],
+  ['F6', 'policy', 'user', `${POLICY_CLIENT}.user.UserClient`],
+];
+
+const isFailedCall = ({ metric, value }) => {
+  if (value === 0) return false;
+  const error = typeof metric.error === 'string' ? metric.error.trim() : '';
+  if (/^5\d{2}$/.test(metric.http_status_code) || (error && error !== 'none')) return true;
+  if (/^[1-4]\d{2}$/.test(metric.http_status_code) && error === 'none') return false;
+  return null;
+};
+
+const formatCallCount = (count) =>
+  count > 0 && count < 1 ? '1건 미만' : `${Math.round(count).toLocaleString('ko-KR')}건`;
+
+/** 오류 라벨이 없는 호출을 성공으로 가정하지 않으며, 5xx와 연결 오류를 중복해서 세지 않는다. */
+export const toFeignRows = (series) =>
+  CALL_FLOWS.map(([id, source, target, clientName]) => {
+    let calls = series === null ? FAILED : '불러오는 중…';
+    let failures = calls;
+    let hasFailures = false;
+    if (!clientName) {
+      calls = failures = '측정 전';
+    } else if (Array.isArray(series)) {
+      const samples = series.filter(
+        ({ metric }) =>
+          metric.application === `${source}-service` && metric.clientName === clientName,
+      );
+      const total = samples.reduce((sum, { value }) => sum + value, 0);
+      if (samples.some(({ value }) => !Number.isFinite(value) || value < 0)) {
+        calls = failures = MEASURING;
+      } else if (!samples.length || total === 0) {
+        calls = '최근 호출 없음';
+        failures = '—';
+      } else {
+        calls = formatCallCount(total);
+        const failed = samples.map(isFailedCall);
+        const failureCount = failed.includes(null)
+          ? null
+          : samples.reduce((sum, { value }, index) => sum + (failed[index] ? value : 0), 0);
+        failures = failureCount === null ? '측정 전' : formatCallCount(failureCount);
+        hasFailures = failureCount > 0;
+      }
+    }
+    return { id, source, target, calls, failures, hasFailures, p95: '측정 전' };
+  });

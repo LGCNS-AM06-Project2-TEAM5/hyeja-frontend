@@ -14,7 +14,12 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 
 import * as adminApi from '@/api/adminApi';
-import { getServiceStatus, toGatewaySummary, toServiceRows } from '@/api/prometheusApi';
+import {
+  getServiceStatus,
+  toGatewaySummary,
+  toServiceRows,
+  toFeignRows,
+} from '@/api/prometheusApi';
 import PolicyEventStatusCard from '@/components/admin/PolicyEventStatusCard';
 import AppIcon from '@/components/common/AppIcon';
 import { TOAST_MESSAGES } from '@/constants/messages';
@@ -65,7 +70,7 @@ function AdminPage() {
           metrics:
             metrics.status === 'fulfilled'
               ? metrics.value
-              : { up: null, rate: null, latency: null, errors: null, requests: null },
+              : { up: null, rate: null, latency: null, errors: null, requests: null, feign: null },
           pending:
             events.status === 'fulfilled' && Number.isFinite(events.value?.pendingCount)
               ? events.value.pendingCount
@@ -245,6 +250,57 @@ function AdminPage() {
             )}
           </Stack>
         </Card>
+        {monitoring.metrics !== null && (
+          <Card variant="outlined" sx={{ p: 2, mt: 3 }}>
+            <Stack spacing={2}>
+              <Box>
+                <Typography variant="subtitle1">서비스 간 호출</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  최근 5분 동안 누가 누구를 불렀는지 확인해요.
+                </Typography>
+              </Box>
+              <Box sx={{ overflowX: 'auto' }}>
+                <Table size="small" aria-label="서비스 간 호출">
+                  <TableHead>
+                    <TableRow>
+                      {['구분', '호출', '최근 5분', '실패', '응답 시간 p95'].map((label) => (
+                        <TableCell key={label}>{label}</TableCell>
+                      ))}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {toFeignRows(monitoring.metrics?.feign).map((row) => (
+                      <TableRow key={row.id}>
+                        <TableCell component="th" scope="row">
+                          {row.id}
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          {row.source} → {row.target}
+                        </TableCell>
+                        <TableCell>{row.calls}</TableCell>
+                        <TableCell
+                          sx={{
+                            color: row.hasFailures ? 'error.main' : 'text.primary',
+                          }}
+                        >
+                          {row.failures}
+                        </TableCell>
+                        <TableCell>{row.p95}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Box>
+              <Typography variant="body2" color="text.secondary">
+                실패는 5xx 응답 또는 오류로 기록된 호출을 한 번씩 세어요. 오류 정보가 부족하면 실패
+                수는 측정 전으로 표시해요.
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                호출별 응답 시간과 F5는 아직 측정 전이에요.
+              </Typography>
+            </Stack>
+          </Card>
+        )}
       </Box>
       <Box role="tabpanel" id="admin-panel-1" aria-labelledby="admin-tab-1" hidden={tab !== 1}>
         {tab === 1 && <PolicyEventStatusCard />}
