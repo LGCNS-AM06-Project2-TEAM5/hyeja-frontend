@@ -17,6 +17,18 @@ beforeEach(() => vi.stubEnv('VITE_PROMETHEUS_URL', 'http://monitoring.test'));
 afterEach(() => vi.unstubAllEnvs());
 
 describe('관리자 장애 대응·트러블 슈팅', () => {
+  it('서킷 브레이커 여섯 호출과 차단·정상·확인 중 상태를 보여 준다', async () => {
+    await openOpsTab();
+    const table = within(screen.getByRole('table', { name: '서킷 브레이커' }));
+    expect(table.getAllByRole('row')).toHaveLength(7);
+    const f1 = within(table.getByRole('row', { name: /F1/ }));
+    expect(await f1.findByText('차단')).toBeInTheDocument();
+    expect(f1.getByText('recommendation → user')).toBeInTheDocument();
+    expect(f1.getByText('25%')).toBeInTheDocument();
+    expect(within(table.getByRole('row', { name: /F2/ })).getByText('정상')).toBeInTheDocument();
+    expect(within(table.getByRole('row', { name: /F3/ })).getByText('확인 중')).toBeInTheDocument();
+    expect(within(table.getByRole('row', { name: /F5/ })).getByText('측정 전')).toBeInTheDocument();
+  });
   it('기존 지표와 이벤트 대기 건수로 네 가지 장애 대응을 보여 준다', async () => {
     await openOpsTab();
     const table = within(await screen.findByRole('table', { name: '장애 대응 시나리오' }));
@@ -43,6 +55,7 @@ describe('관리자 장애 대응·트러블 슈팅', () => {
   it('바로가기는 새 탭으로 열고 설정한 Prometheus 주소를 쓴다', async () => {
     await openOpsTab();
     for (const [name, href] of [
+      ['Grafana 대시보드', 'http://localhost:3000/d/hyeja-msa'],
       ['Zipkin 추적', 'http://localhost:9411'],
       ['Eureka', 'http://localhost:8761'],
       ['GitHub Actions', 'https://github.com/LGCNS-AM06-Project2-TEAM5/hyeja-msa/actions'],

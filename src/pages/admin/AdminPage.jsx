@@ -9,6 +9,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
+import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
@@ -22,6 +23,7 @@ import {
   toFeignRows,
   toPolicyPipeline,
   toResilienceRows,
+  toCircuitRows,
 } from '@/api/prometheusApi';
 import EventPipeline from '@/components/admin/EventPipeline';
 import TrendChart from '@/components/admin/TrendChart';
@@ -85,6 +87,9 @@ function AdminPage() {
             errors: null,
             requests: null,
             feign: null,
+            circuit: null,
+            circuitFailure: null,
+            heap: null,
           },
           isLoading: false,
         }),
@@ -278,9 +283,11 @@ function AdminPage() {
                 <Table size="small" aria-label="서비스 상태">
                   <TableHead>
                     <TableRow>
-                      {['서비스', '상태', '초당 요청', '응답 시간 p95', '5xx 비율'].map((label) => (
-                        <TableCell key={label}>{label}</TableCell>
-                      ))}
+                      {['서비스', '상태', '초당 요청', '응답 시간 p95', '5xx 비율', 'JVM 힙'].map(
+                        (label) => (
+                          <TableCell key={label}>{label}</TableCell>
+                        ),
+                      )}
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -305,6 +312,7 @@ function AdminPage() {
                         <TableCell>{row.rate}</TableCell>
                         <TableCell>{row.latency}</TableCell>
                         <TableCell>{row.errors}</TableCell>
+                        <TableCell>{row.heap}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -411,6 +419,43 @@ function AdminPage() {
             <Card variant="outlined" sx={{ p: 2 }}>
               <Stack spacing={2}>
                 <Box>
+                  <Typography variant="subtitle1">서킷 브레이커</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    실패가 쌓이면 회로가 열려 상대 서비스를 부르지 않고 대체 응답을 보내요.
+                  </Typography>
+                </Box>
+                <Box sx={{ overflowX: 'auto' }}>
+                  <Table size="small" aria-label="서킷 브레이커">
+                    <TableHead>
+                      <TableRow>
+                        {['호출', '호출하는 쪽 → 받는 쪽', '상태', '실패율'].map((label) => (
+                          <TableCell key={label}>{label}</TableCell>
+                        ))}
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {toCircuitRows(monitoring.metrics).map((row) => (
+                        <TableRow key={row.name}>
+                          <TableCell component="th" scope="row">
+                            {row.id}
+                          </TableCell>
+                          <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                            {row.source} → {row.target}
+                          </TableCell>
+                          <TableCell>
+                            <Chip size="small" label={row.status} color={row.tone} />
+                          </TableCell>
+                          <TableCell>{row.failureRate}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </Box>
+              </Stack>
+            </Card>
+            <Card variant="outlined" sx={{ p: 2 }}>
+              <Stack spacing={2}>
+                <Box>
                   <Typography variant="subtitle1">장애 대응 시나리오</Typography>
                   <Typography variant="body2" color="text.secondary">
                     장애를 일부러 내면 이 표의 '지금' 칸이 바뀌어요.
@@ -495,6 +540,7 @@ function AdminPage() {
                 <Typography variant="subtitle1">바로가기</Typography>
                 <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
                   {[
+                    ['Grafana 대시보드', 'http://localhost:3000/d/hyeja-msa'],
                     ['Zipkin 추적', 'http://localhost:9411'],
                     ['Eureka', 'http://localhost:8761'],
                     [
