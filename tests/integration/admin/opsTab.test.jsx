@@ -55,6 +55,7 @@ describe('관리자 장애 대응·트러블 슈팅', () => {
   it('바로가기는 새 탭으로 열고 설정한 Prometheus 주소를 쓴다', async () => {
     await openOpsTab();
     for (const [name, href] of [
+      ['Grafana 대시보드', 'http://localhost:3000/d/hyeja-msa'],
       ['Zipkin 추적', 'http://localhost:9411'],
       ['Eureka', 'http://localhost:8761'],
       ['GitHub Actions', 'https://github.com/LGCNS-AM06-Project2-TEAM5/hyeja-msa/actions'],

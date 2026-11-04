@@ -540,6 +540,7 @@ function AdminPage() {
                 <Typography variant="subtitle1">바로가기</Typography>
                 <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
                   {[
+                    ['Grafana 대시보드', 'http://localhost:3000/d/hyeja-msa'],
                     ['Zipkin 추적', 'http://localhost:9411'],
                     ['Eureka', 'http://localhost:8761'],
                     [
