@@ -452,6 +452,8 @@ export const PROMETHEUS_QUERIES = {
   errors: 'hyeja:http_5xx:ratio5m',
   requests:
     'sum by (spring_cloud_gateway_route_id, http_status_code) (increase(http_client_requests_seconds_count{application="gateway-service", spring_cloud_gateway_route_id!=""}[5m]))',
+  policyEvents: 'sum by (result) (hyeja_policy_updated_events_total)',
+  policyDlt: 'sum(hyeja_policy_updated_dlt_total)',
 };
 const vector = (metric, value) => ({ metric, value: [1793710800, String(value)] });
 export const PROMETHEUS_RESULTS = {
@@ -516,6 +518,11 @@ export const PROMETHEUS_RESULTS = {
     vector({ spring_cloud_gateway_route_id: 'policy-service', http_status_code: '200' }, 98),
     vector({ spring_cloud_gateway_route_id: 'policy-service', http_status_code: '500' }, 2),
   ],
+  [PROMETHEUS_QUERIES.policyEvents]: [
+    vector({ result: 'applied' }, 12),
+    vector({ result: 'duplicate' }, 3),
+  ],
+  [PROMETHEUS_QUERIES.policyDlt]: [vector({}, 1)],
 };
 export const prometheusResponse = (result) => ({
   status: 'success',

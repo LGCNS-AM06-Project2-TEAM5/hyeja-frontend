@@ -19,7 +19,9 @@ import {
   toGatewaySummary,
   toServiceRows,
   toFeignRows,
+  toPolicyPipeline,
 } from '@/api/prometheusApi';
+import EventPipeline from '@/components/admin/EventPipeline';
 import PolicyEventStatusCard from '@/components/admin/PolicyEventStatusCard';
 import AppIcon from '@/components/common/AppIcon';
 import { TOAST_MESSAGES } from '@/constants/messages';
@@ -49,7 +51,8 @@ function AdminPage() {
   const [reloadToken, setReloadToken] = useState(0);
   const [monitoring, setMonitoring] = useState({
     metrics: undefined,
-    pending: undefined,
+    events: undefined,
+    eventsError: '',
     isLoading: true,
   });
 
@@ -60,26 +63,30 @@ function AdminPage() {
 
   useEffect(() => {
     let isActive = true;
-    const load = async () => {
-      const [metrics, events] = await Promise.allSettled([
-        getServiceStatus(),
-        adminApi.getPolicyEventStatus(),
-      ]);
+    const update = (result) => {
       if (isActive) {
-        setMonitoring({
-          metrics:
-            metrics.status === 'fulfilled'
-              ? metrics.value
-              : { up: null, rate: null, latency: null, errors: null, requests: null, feign: null },
-          pending:
-            events.status === 'fulfilled' && Number.isFinite(events.value?.pendingCount)
-              ? events.value.pendingCount
-              : null,
-          isLoading: false,
-        });
+        setMonitoring((previous) => ({ ...previous, ...result }));
       }
     };
-    load();
+    getServiceStatus().then(
+      (metrics) => update({ metrics, isLoading: false }),
+      () =>
+        update({
+          metrics: {
+            up: null,
+            rate: null,
+            latency: null,
+            errors: null,
+            requests: null,
+            feign: null,
+          },
+          isLoading: false,
+        }),
+    );
+    adminApi.getPolicyEventStatus().then(
+      (events) => update({ events: events ?? null, eventsError: '' }),
+      (error) => update({ events: null, eventsError: getErrorMessage(error) }),
+    );
     return () => {
       isActive = false;
     };
@@ -103,17 +110,30 @@ function AdminPage() {
       : monitoring.metrics === null
         ? '측정 전'
         : null;
+  const pending = Number.isFinite(monitoring.events?.pendingCount)
+    ? monitoring.events.pendingCount
+    : monitoring.events === undefined
+      ? undefined
+      : null;
+  const pipeline = toPolicyPipeline(monitoring.metrics);
+  const events = monitoring.events;
+  const outboxDetail =
+    events === undefined
+      ? '불러오는 중…'
+      : events === null
+        ? '불러오지 못했어요'
+        : `대기 ${events.pendingCount}건 · 보냄 ${events.publishedCount}건`;
   const summaries = [
     ['서비스 상태', unavailable ?? serviceCount],
     ['최근 5분 요청', unavailable ?? requestCount],
     ['5xx 비율', unavailable ?? errorRatio],
     [
       '이벤트 보내기 대기',
-      monitoring.pending === undefined
+      pending === undefined
         ? '불러오는 중…'
-        : monitoring.pending === null
+        : pending === null
           ? '불러오지 못했어요'
-          : `${monitoring.pending.toLocaleString('ko-KR')}건`,
+          : `${pending.toLocaleString('ko-KR')}건`,
     ],
   ];
 
@@ -303,7 +323,44 @@ function AdminPage() {
         )}
       </Box>
       <Box role="tabpanel" id="admin-panel-1" aria-labelledby="admin-tab-1" hidden={tab !== 1}>
-        {tab === 1 && <PolicyEventStatusCard />}
+        {tab === 1 && (
+          <Stack spacing={3}>
+            <EventPipeline
+              title="policy-updated"
+              description="정책이 바뀌면 관심 목록의 정책 정보도 따라 바뀌어요. 같은 이벤트는 한 번만 반영하고, 계속 실패하면 DLT로 따로 모아요."
+              steps={[
+                { label: '정책 저장', detail: '수집 트랜잭션' },
+                { label: 'policy_outbox', detail: outboxDetail },
+                { label: 'Kafka policy-updated', detail: 'key = policyId' },
+                {
+                  label: 'engagement 스냅샷',
+                  detail: `반영 ${pipeline.applied} · 중복 무시 ${pipeline.duplicate}`,
+                },
+                {
+                  label: 'policy-updated-dlt',
+                  detail: `DLT ${pipeline.dlt}`,
+                  tone: pipeline.hasDlt ? 'error' : undefined,
+                },
+              ]}
+            />
+            <EventPipeline
+              title="member-withdrawn"
+              description="회원이 탈퇴하면 관심 정책과 알림을 정리해요. 3번 실패하면 DLT에 저장하고, 3건이 쌓이면 관리자에게 메일을 보내요."
+              steps={[
+                { label: '탈퇴 커밋', detail: 'user · member_outbox' },
+                { label: 'Kafka member-withdrawn' },
+                { label: 'engagement 관심·알림 정리' },
+                { label: 'member-withdrawn-dlt', detail: '저장 후 3건마다 관리자 메일' },
+              ]}
+            />
+            <PolicyEventStatusCard
+              status={events}
+              errorMessage={monitoring.eventsError}
+              isLoading={monitoring.isLoading}
+              onReload={reload}
+            />
+          </Stack>
+        )}
       </Box>
       <Box role="tabpanel" id="admin-panel-3" aria-labelledby="admin-tab-3" hidden={tab !== 3}>
         <Stack spacing={3}>

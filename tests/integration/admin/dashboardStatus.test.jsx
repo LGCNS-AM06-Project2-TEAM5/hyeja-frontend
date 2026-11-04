@@ -2,15 +2,18 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import { HttpResponse, http } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ENDPOINTS } from '@/api/endpoints';
 import { ROUTES } from '@/constants/routes';
 
 import { renderApp, signInAs } from '../../helpers/renderApp';
 import {
+  POLICY_EVENT_STATUS_RESPONSE,
   PROMETHEUS_QUERIES,
   PROMETHEUS_RESULTS,
   TOKENS,
   prometheusResponse,
 } from '../../msw/fixtures';
+import { apiUrl } from '../../msw/respond';
 import { server } from '../../msw/server';
 
 const endpoint = 'http://monitoring.test/api/v1/query';
@@ -55,6 +58,51 @@ describe('관리자 운영 현황', () => {
     expect(await screen.findByText('모니터링 주소가 설정되지 않았어요')).toBeInTheDocument();
     expect(request).not.toHaveBeenCalled();
     expect(await screen.findByText('1건')).toBeInTheDocument();
+  });
+
+  it('이벤트 API가 느려도 서비스 상태를 먼저 표시한다', async () => {
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get(apiUrl(ENDPOINTS.ADMIN.POLICY_EVENTS), async () => {
+        await gate;
+        return HttpResponse.json(POLICY_EVENT_STATUS_RESPONSE);
+      }),
+    );
+    try {
+      await openDashboard();
+      expect(await screen.findByText('4 / 5 정상')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '새로고침' })).toBeEnabled();
+      expect(screen.queryByText('1건')).not.toBeInTheDocument();
+    } finally {
+      release();
+    }
+    expect(await screen.findByText('1건')).toBeInTheDocument();
+  });
+
+  it('Prometheus가 느려도 이벤트 대기 건수를 먼저 표시한다', async () => {
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get(endpoint, async ({ request }) => {
+        await gate;
+        const query = new URL(request.url).searchParams.get('query');
+        return HttpResponse.json(prometheusResponse(PROMETHEUS_RESULTS[query]));
+      }),
+    );
+    try {
+      await openDashboard();
+      expect(await screen.findByText('1건')).toBeInTheDocument();
+      expect(screen.queryByText('4 / 5 정상')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '새로고침' })).toBeDisabled();
+    } finally {
+      release();
+    }
+    expect(await screen.findByText('4 / 5 정상')).toBeInTheDocument();
   });
 
   it('실패한 지표만 오류로 표시하고 빈 결과는 측정 중으로 표시한다', async () => {
@@ -113,11 +161,11 @@ describe('관리자 운영 현황', () => {
     );
     const view = await openDashboard();
     await screen.findByText('4 / 5 정상');
-    expect(queries).toHaveBeenCalledTimes(6);
+    expect(queries).toHaveBeenCalledTimes(8);
     await act(() => vi.advanceTimersByTimeAsync(15000));
-    await waitFor(() => expect(queries).toHaveBeenCalledTimes(12));
+    await waitFor(() => expect(queries).toHaveBeenCalledTimes(16));
     view.unmount();
     await act(() => vi.advanceTimersByTimeAsync(15000));
-    expect(queries).toHaveBeenCalledTimes(12);
+    expect(queries).toHaveBeenCalledTimes(16);
   });
 });

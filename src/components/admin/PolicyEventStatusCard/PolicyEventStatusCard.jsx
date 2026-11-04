@@ -1,14 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import Divider from '@mui/material/Divider';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 
-import * as adminApi from '@/api/adminApi';
 import AppIcon from '@/components/common/AppIcon';
-import { useToast } from '@/hooks/useToast';
-import { getErrorMessage } from '@/utils/getErrorMessage';
 
 const PIPELINE = ['정책 저장', 'policy_outbox', 'Kafka policy-updated', 'engagement 스냅샷'];
 
@@ -31,44 +27,12 @@ const formatTime = (value) => {
   return Number.isNaN(date.getTime()) ? '-' : timeFormatter.format(date);
 };
 
-/** 정책이 바뀔 때 나가는 policy-updated 이벤트가 Kafka로 잘 나가고 있는지 보여 준다. */
-function PolicyEventStatusCard() {
-  const { showError } = useToast();
-  const [reloadToken, setReloadToken] = useState(0);
-  const [state, setState] = useState({ status: null, isLoading: true });
-  const { status, isLoading } = state;
-
-  useEffect(() => {
-    let isActive = true;
-
-    const loadStatus = async () => {
-      try {
-        const data = await adminApi.getPolicyEventStatus();
-
-        if (isActive) {
-          setState({ status: data, isLoading: false });
-        }
-      } catch (error) {
-        if (isActive) {
-          setState((previous) => ({ ...previous, isLoading: false }));
-          showError(getErrorMessage(error));
-        }
-      }
-    };
-
-    loadStatus();
-
-    return () => {
-      isActive = false;
-    };
-  }, [reloadToken, showError]);
-
-  /** 화면은 그대로 두고 숫자만 다시 받는다. */
-  const reload = useCallback(() => {
-    setState((previous) => ({ ...previous, isLoading: true }));
-    setReloadToken((previous) => previous + 1);
-  }, []);
-
+/**
+ * 정책이 바뀔 때 나가는 policy-updated 이벤트가 Kafka로 잘 나가고 있는지 보여 준다.
+ * 조회는 관리자 화면(AdminPage)이 한 번만 하고 요약 칸과 이 카드가 같은 값을 나눠 쓴다.
+ * status: undefined는 불러오는 중, null은 실패(errorMessage), 객체는 GET /api/policies/admin/events 결과다.
+ */
+function PolicyEventStatusCard({ status, errorMessage, isLoading, onReload }) {
   return (
     <Card variant="outlined" sx={{ p: 2 }}>
       <Stack spacing={2}>
@@ -93,10 +57,16 @@ function PolicyEventStatusCard() {
               ))}
             </Typography>
           </Stack>
-          <Button variant="outlined" onClick={reload} disabled={isLoading} sx={{ flexShrink: 0 }}>
+          <Button variant="outlined" onClick={onReload} disabled={isLoading} sx={{ flexShrink: 0 }}>
             새로고침
           </Button>
         </Stack>
+
+        {status === null && (
+          <Typography variant="body1" color="error.main">
+            {errorMessage}
+          </Typography>
+        )}
 
         {status && (
           <>
