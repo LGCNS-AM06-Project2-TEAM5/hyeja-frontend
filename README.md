@@ -6,7 +6,10 @@
 
 **혜**택 + **자**격 — 내 조건에 맞는 청년 주거 정책을, 받을 수 있는지와 그 이유까지 알려주는 서비스
 
-LG CNS AM Inspire 6기 미니프로젝트 1 · 7조 **혜자본주의**
+LG CNS AM Inspire 6기 미니프로젝트 2 · 5조 **혜자 MSA**
+
+미니프로젝트 1(7조 혜자본주의)에서 만든 화면을 그대로 쓰고, 이번에는 API를 MSA Gateway로 연결하고 관리자 운영 화면을 더했습니다.
+아래 표는 1차 때 이 화면을 만든 7조 팀원입니다.
 
 <table align="center">
   <tr><th>Frontend</th><th>Frontend</th><th>Backend</th><th>Backend</th><th>Backend</th></tr>
@@ -14,8 +17,8 @@ LG CNS AM Inspire 6기 미니프로젝트 1 · 7조 **혜자본주의**
   <tr><td align="center"><a href="https://github.com/kimrim818-afk">@kimrim818-afk</a></td><td align="center"><a href="https://github.com/eom-tae-in">@eom-tae-in</a></td><td align="center"><a href="https://github.com/yhi9839">@yhi9839</a></td><td align="center"><a href="https://github.com/GREED-YI">@GREED-YI</a></td><td align="center"><a href="https://github.com/ljw2869">@ljw2869</a></td></tr>
 </table>
 
-[![Frontend](https://img.shields.io/badge/Frontend_Repo-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Hyejabonjuui/frontend)
-[![Backend](https://img.shields.io/badge/Backend_Repo-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Hyejabonjuui/backend)
+[![MSA](https://img.shields.io/badge/MSA_Repo-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/LGCNS-AM06-Project2-TEAM5/hyeja-msa)
+[![1차 Frontend](https://img.shields.io/badge/1차_Frontend-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Hyejabonjuui/frontend)
 
 </div>
 
@@ -96,7 +99,7 @@ LG CNS AM Inspire 6기 미니프로젝트 1 · 7조 **혜자본주의**
 | 관심 정책           | ♡ 저장 · 해제, 관심 목록 안에서 키워드 검색, 번호 페이지네이션                                                                                           | `/favorites`               |
 | 마감 알림           | 관심 정책 마감 D-7 알림. 헤더 알림 창에는 안 읽은 알림만(누르면 창을 닫고 정책 상세로), 마이페이지에는 전체 목록 · 읽음 · 삭제                           | 헤더 · 마이페이지          |
 | 계정                | 계정 정보, 비밀번호를 확인한 뒤 회원 탈퇴(조건 · 관심 · 알림 함께 삭제), 닉네임 · 생년월일로 이메일 찾기                                                 | 마이페이지 · `/find-email` |
-| 관리자              | 온통청년 정책 수집 실행. 중간에 멈추면 멈춘 페이지와 저장 건수를 표시                                                                                    | `/admin`                   |
+| 관리자              | 온통청년 정책 수집 실행, 운영 현황(서비스 상태 · JVM 힙 · 서비스 간 호출 · 서킷 브레이커 · 장애 대응 시나리오), 이벤트 동기화(보내기 대기 · DLT)         | `/admin`                   |
 
 <br>
 
@@ -238,7 +241,7 @@ docs
 ### 사전 준비
 
 - Node.js 24 이상 (`.nvmrc` — nvm을 쓰면 `nvm use`)
-- 실서버에 붙일 때는 백엔드 서버 ([backend 저장소](https://github.com/Hyejabonjuui/backend) 참고). 백엔드 없이 보려면 목 모드를 씁니다.
+- 실서버에 붙일 때는 [hyeja-msa](https://github.com/LGCNS-AM06-Project2-TEAM5/hyeja-msa) 전체를 Docker Compose로 띄웁니다(실행 방법은 그 저장소 README). 모든 API는 Gateway(8000)를 거칩니다. 백엔드 없이 보려면 목 모드를 씁니다.
 
 ### 1. 설치
 
@@ -252,10 +255,10 @@ npm install
 
 | 변수                | 설명                                | 예시                    |
 | ------------------- | ----------------------------------- | ----------------------- |
-| `VITE_API_BASE_URL` | 백엔드 API 주소                     | `http://localhost:8080` |
+| `VITE_API_BASE_URL` | Gateway 주소                        | `http://localhost:8000` |
 | `VITE_USE_MOCK`     | `true`면 목 모드 (백엔드 없이 실행) | `true` / `false`        |
 
-배포 빌드는 `.env.production`의 `VITE_USE_MOCK=false`를 씁니다. 배포할 때는 `VITE_API_BASE_URL`을 배포된 API 주소로 지정합니다.
+배포 빌드는 `.env.production`의 `VITE_USE_MOCK=false`를 씁니다. EC2에 올린 서버를 쓸 때는 `VITE_API_BASE_URL`을 그 서버의 Gateway 주소(`http://<서버 주소>:8000`)로 바꿉니다. Gateway CORS가 `http://localhost:5173`만 허용하므로 프런트는 로컬 개발 서버(`npm run dev`)로 띄웁니다.
 
 ### 3. 실행
 
@@ -320,14 +323,14 @@ Linux(CI 러너 포함)에서는 브라우저가 쓰는 시스템 라이브러�
 ### 작업 흐름
 
 ```text
-이슈 생성 → 이슈 브랜치 생성 → 개발 · 커밋 → git pull origin main → push → PR → 리뷰 · CI 통과 → squash merge
+이슈 생성 → 이슈 브랜치 생성 → 개발 · 커밋 → git pull origin develop → push → PR → 리뷰 · CI 통과 → squash merge
 ```
 
 1. 모든 작업은 **이슈**부터 만듭니다. ([이슈 템플릿](.github/ISSUE_TEMPLATE/작업-이슈.md))
 2. **1이슈 1브랜치**로 작업합니다.
-3. push 전에 `git pull origin main`으로 최신 main을 반영합니다.
-4. `main` 대상으로 PR을 올리고 이슈를 연결합니다(`Closes #번호`). ([PR 템플릿](.github/pull_request_template.md))
-5. CI(`verify` · `e2e`) 통과와 리뷰 후 **squash merge**합니다. main 이력에는 PR 제목이 남습니다.
+3. push 전에 `git pull origin develop`으로 최신 develop을 반영합니다.
+4. `develop` 대상으로 PR을 올리고 이슈를 연결합니다(`Closes #번호`). ([PR 템플릿](.github/pull_request_template.md))
+5. CI(`verify` · `e2e`) 통과와 리뷰 후 **squash merge**합니다. develop 이력에는 PR 제목이 남습니다.
 
 ### 컨벤션
 
