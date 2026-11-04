@@ -28,3 +28,7 @@ export const toPolicySyncStop = (error) => {
     savedCount: data.result?.savedCount ?? null,
   };
 };
+
+/** policy_outbox의 보내기 대기·보낸 건수와 최근 이벤트(최신순, 최대 10건)를 가져온다. */
+export const getPolicyEventStatus = async () =>
+  unwrapResult(await httpClient.get(ENDPOINTS.ADMIN.POLICY_EVENTS));

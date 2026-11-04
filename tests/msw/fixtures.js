@@ -396,6 +396,44 @@ export const POLICY_SYNC_RESPONSE = {
   result: '온통청년 주거 정책 142건 동기화가 완료되었습니다.',
 };
 
+/**
+ * 백엔드 GET /api/policies/admin/events 응답. policy_outbox의 대기·발행 건수와 최근 이벤트(최신순, 최대 10건)다.
+ * publishedAt이 null이면 아직 Kafka로 보내지 않은 이벤트다.
+ */
+export const POLICY_EVENT_STATUS_RESPONSE = {
+  isSuccess: true,
+  code: 'SUCCESS_001',
+  message: '성공입니다.',
+  result: {
+    pendingCount: 1,
+    publishedCount: 2,
+    lastPublishedAt: '2026-11-03T21:05:00',
+    recentEvents: [
+      {
+        eventId: 'event-3',
+        policyId: 'R2026110300003',
+        eventType: 'policy-updated',
+        createdAt: '2026-11-03T21:06:00',
+        publishedAt: null,
+      },
+      {
+        eventId: 'event-2',
+        policyId: 'R2026110300002',
+        eventType: 'policy-updated',
+        createdAt: '2026-11-03T21:04:00',
+        publishedAt: '2026-11-03T21:05:00',
+      },
+      {
+        eventId: 'event-1',
+        policyId: 'R2026110300001',
+        eventType: 'policy-updated',
+        createdAt: '2026-11-03T21:00:00',
+        publishedAt: '2026-11-03T21:01:00',
+      },
+    ],
+  },
+};
+
 /** 온통청년 API가 중간에 실패하면 502(POLICY_002)와 함께 멈춘 페이지·저장 건수를 준다. */
 export const POLICY_SYNC_STOPPED_RESPONSE = {
   isSuccess: false,

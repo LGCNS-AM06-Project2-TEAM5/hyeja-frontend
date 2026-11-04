@@ -41,5 +41,6 @@ export const ENDPOINTS = {
   },
   ADMIN: {
     POLICY_SYNC: '/api/policies/sync', // F-09
+    POLICY_EVENTS: '/api/policies/admin/events', // policy-updated 발행 상태
   },
 };

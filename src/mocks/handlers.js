@@ -1108,6 +1108,42 @@ export const HANDLERS = [
       });
     },
   },
+  {
+    method: 'get',
+    match: (url) => url === '/api/policies/admin/events',
+    handle: ({ user }) => {
+      const denied = requireUser(user);
+      if (denied) {
+        return denied;
+      }
+      if (user.role !== 'ADMIN') {
+        return fail(403, '접근 권한이 없어요');
+      }
+
+      // 목 서버에는 Kafka가 없으므로 정책 앞 3건을 보낸 이벤트로 보여 준다.
+      const recentEvents = getActivePolicies()
+        .slice(0, 3)
+        .map((policy, index) => ({
+          eventId: `mock-event-${index + 1}`,
+          policyId: String(policy.id),
+          eventType: 'policy-updated',
+          createdAt: new Date(Date.now() - (index + 1) * 60000).toISOString(),
+          publishedAt: new Date(Date.now() - index * 60000).toISOString(),
+        }));
+
+      return ok({
+        isSuccess: true,
+        code: 'SUCCESS_001',
+        message: '성공입니다.',
+        result: {
+          pendingCount: 0,
+          publishedCount: recentEvents.length,
+          lastPublishedAt: recentEvents[0]?.publishedAt ?? null,
+          recentEvents,
+        },
+      });
+    },
+  },
 ];
 
 export const findHandler = (method, url) =>
