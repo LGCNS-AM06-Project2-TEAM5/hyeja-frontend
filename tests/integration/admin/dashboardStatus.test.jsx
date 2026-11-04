@@ -33,6 +33,16 @@ afterEach(() => {
 });
 
 describe('관리자 운영 현황', () => {
+  it('서비스 상태 표의 5xx 비율 다음에 JVM 힙을 표시한다', async () => {
+    await openDashboard();
+    await screen.findByText('4 / 5 정상');
+    expect(
+      serviceTable()
+        .getAllByRole('columnheader')
+        .map((cell) => cell.textContent),
+    ).toEqual(['서비스', '상태', '초당 요청', '응답 시간 p95', '5xx 비율', 'JVM 힙']);
+    expect(within(policyRow()).getByText('512MB')).toBeInTheDocument();
+  });
   it('서비스 상태와 단위 변환, Gateway 요약, 이벤트 대기를 보여 준다', async () => {
     await openDashboard();
     expect(await screen.findByText('4 / 5 정상')).toBeInTheDocument();
@@ -161,11 +171,11 @@ describe('관리자 운영 현황', () => {
     );
     const view = await openDashboard();
     await screen.findByText('4 / 5 정상');
-    expect(queries).toHaveBeenCalledTimes(8);
+    expect(queries).toHaveBeenCalledTimes(11);
     await act(() => vi.advanceTimersByTimeAsync(15000));
-    await waitFor(() => expect(queries).toHaveBeenCalledTimes(16));
+    await waitFor(() => expect(queries).toHaveBeenCalledTimes(22));
     view.unmount();
     await act(() => vi.advanceTimersByTimeAsync(15000));
-    expect(queries).toHaveBeenCalledTimes(16);
+    expect(queries).toHaveBeenCalledTimes(22);
   });
 });

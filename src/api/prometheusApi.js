@@ -8,6 +8,9 @@ const SERVICES = [
   ['recommendation-service', 'recommendation-service:8084'],
 ];
 const QUERIES = {
+  circuit: 'resilience4j_circuitbreaker_state',
+  circuitFailure: 'resilience4j_circuitbreaker_failure_rate',
+  heap: 'sum by (instance) (jvm_memory_used_bytes{area="heap"})',
   feign:
     'sum by (application, clientName, http_status_code, error) (increase(http_client_requests_seconds_count{clientName!=""}[5m]))',
   up: 'up{job="hyeja-services"}',
@@ -169,6 +172,49 @@ export const toServiceRows = (metrics) =>
       rate: display('rate', (number) => number.toFixed(1)),
       latency: display('latency', (number) => `${Math.round(number * 1000)}ms`),
       errors: display('errors', (number) => `${(number * 100).toFixed(1)}%`),
+      heap: toHeapUsage(metrics?.heap, instance),
+    };
+  });
+
+const toHeapUsage = (series, instance) => {
+  if (series === null) return FAILED;
+  const value = series?.find(({ metric }) => metric.instance === instance)?.value;
+  return Number.isFinite(value) && value >= 0
+    ? `${Math.round(value / (1024 * 1024))}MB`
+    : MEASURING;
+};
+
+export const CIRCUITS = [
+  ['recUserProfile', 'recommendation', 'user', 'F1'],
+  ['recPolicyCandidates', 'recommendation', 'policy', 'F2'],
+  ['recEngagementFavorites', 'recommendation', 'engagement', 'F3'],
+  ['policyEngagementFavorites', 'policy', 'engagement', 'F4'],
+  ['engPolicySnapshot', 'engagement', 'policy', 'F5'],
+  ['policyUserProfile', 'policy', 'user', 'F6'],
+];
+
+export const toCircuitRows = (metrics) =>
+  CIRCUITS.map(([name, source, target, id]) => {
+    const state = metrics?.circuit?.find(({ metric, value }) => metric.name === name && value === 1)
+      ?.metric.state;
+    const states = {
+      closed: ['정상', 'success'],
+      open: ['차단', 'error'],
+      half_open: ['확인 중', 'warning'],
+    };
+    const [status, tone] =
+      metrics?.circuit === null
+        ? [FAILED, 'default']
+        : (states[state] ?? [state ? state.toUpperCase() : '측정 전', 'default']);
+    const value = metrics?.circuitFailure?.find(({ metric }) => metric.name === name)?.value;
+    return {
+      id,
+      name,
+      source,
+      target,
+      status,
+      tone,
+      failureRate: Number.isFinite(value) && value >= 0 ? `${value.toFixed(0)}%` : '표본 부족',
     };
   });
 

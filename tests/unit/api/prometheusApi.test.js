@@ -8,6 +8,7 @@ import {
   toFeignRows,
   toPolicyPipeline,
   toResilienceRows,
+  toCircuitRows,
 } from '@/api/prometheusApi';
 
 vi.mock('axios', () => ({ default: { get: vi.fn() } }));
@@ -141,7 +142,7 @@ describe('Prometheus 조회', () => {
     });
     const status = await getServiceStatus();
     expect(status.latency[0].value).toBe(0.061);
-    expect(axios.get).toHaveBeenCalledTimes(8);
+    expect(axios.get).toHaveBeenCalledTimes(11);
     expect(axios.get).toHaveBeenCalledWith('http://monitoring.test/api/v1/query', {
       params: { query: 'up{job="hyeja-services"}' },
       timeout: 8000,
@@ -317,5 +318,71 @@ describe('policy-updated 처리 건수', () => {
       hasDlt: false,
     });
     expect(toPolicyPipeline(null).applied).toBe('측정 전');
+  });
+});
+
+describe('서킷 브레이커와 JVM 힙', () => {
+  const circuit = (state, value = 1, name = 'recUserProfile') => ({
+    metric: { name, state },
+    value,
+  });
+
+  it.each([
+    ['closed', '정상', 'success'],
+    ['open', '차단', 'error'],
+    ['half_open', '확인 중', 'warning'],
+    ['disabled', 'DISABLED', 'default'],
+  ])('%s 중 값이 1인 상태만 표시한다', (state, status, tone) => {
+    expect(toCircuitRows({ circuit: [circuit('unselected', 0), circuit(state)] })[0]).toMatchObject(
+      { id: 'F1', source: 'recommendation', target: 'user', status, tone },
+    );
+  });
+
+  it('지정된 여섯 호출 순서를 유지하고 지표가 없는 이름은 측정 전이다', () => {
+    const rows = toCircuitRows({ circuit: [circuit('closed')] });
+    expect(rows.map(({ id }) => id)).toEqual(['F1', 'F2', 'F3', 'F4', 'F5', 'F6']);
+    expect(rows[4]).toMatchObject({
+      name: 'engPolicySnapshot',
+      source: 'engagement',
+      target: 'policy',
+      status: '측정 전',
+    });
+    expect(toCircuitRows({ circuit: [] }).every(({ status }) => status === '측정 전')).toBe(true);
+  });
+
+  it('circuit 쿼리 실패는 모든 행에 조회 실패로 표시한다', () => {
+    expect(
+      toCircuitRows({ circuit: null }).every(({ status }) => status === '불러오지 못했어요'),
+    ).toBe(true);
+  });
+
+  it.each([
+    [-1, '표본 부족'],
+    [null, '표본 부족'],
+    [12.6, '13%'],
+    [0, '0%'],
+  ])('실패율 %s를 %s로 표시한다', (value, failureRate) => {
+    expect(
+      toCircuitRows({ circuitFailure: [{ metric: { name: 'recUserProfile' }, value }] })[0]
+        .failureRate,
+    ).toBe(failureRate);
+  });
+
+  it('heap은 application 대신 instance로 연결해 MB 정수로 표시한다', () => {
+    const rows = toServiceRows({
+      heap: [
+        {
+          metric: { instance: 'policy-service:8082', application: 'user-service' },
+          value: 512 * 1024 * 1024,
+        },
+        { metric: { instance: 'gateway-service:8000' }, value: 0 },
+      ],
+    });
+    expect(rows[2].heap).toBe('512MB');
+    expect(rows[0].heap).toBe('0MB');
+    expect(rows[1].heap).toBe('측정 중');
+    expect(toServiceRows({ heap: null }).every(({ heap }) => heap === '불러오지 못했어요')).toBe(
+      true,
+    );
   });
 });

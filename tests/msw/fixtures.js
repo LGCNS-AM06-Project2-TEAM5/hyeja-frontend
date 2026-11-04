@@ -444,6 +444,9 @@ export const POLICY_SYNC_STOPPED_RESPONSE = {
 
 /** 단계 0에서 확인한 쿼리와 vector 응답. 브라우저의 Prometheus 요청을 재현한다. */
 export const PROMETHEUS_QUERIES = {
+  circuit: 'resilience4j_circuitbreaker_state',
+  circuitFailure: 'resilience4j_circuitbreaker_failure_rate',
+  heap: 'sum by (instance) (jvm_memory_used_bytes{area="heap"})',
   feign:
     'sum by (application, clientName, http_status_code, error) (increase(http_client_requests_seconds_count{clientName!=""}[5m]))',
   up: 'up{job="hyeja-services"}',
@@ -457,6 +460,17 @@ export const PROMETHEUS_QUERIES = {
 };
 const vector = (metric, value) => ({ metric, value: [1793710800, String(value)] });
 export const PROMETHEUS_RESULTS = {
+  [PROMETHEUS_QUERIES.circuit]: [
+    vector({ name: 'recUserProfile', state: 'closed' }, 0),
+    vector({ name: 'recUserProfile', state: 'open' }, 1),
+    vector({ name: 'recPolicyCandidates', state: 'closed' }, 1),
+    vector({ name: 'recEngagementFavorites', state: 'half_open' }, 1),
+  ],
+  [PROMETHEUS_QUERIES.circuitFailure]: [
+    vector({ name: 'recUserProfile' }, 25),
+    vector({ name: 'recEngagementFavorites' }, -1),
+  ],
+  [PROMETHEUS_QUERIES.heap]: [vector({ instance: 'policy-service:8082' }, 512 * 1024 * 1024)],
   [PROMETHEUS_QUERIES.feign]: [
     vector(
       {
