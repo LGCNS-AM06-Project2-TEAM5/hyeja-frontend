@@ -528,3 +528,22 @@ export const prometheusResponse = (result) => ({
   status: 'success',
   data: { resultType: 'vector', result },
 });
+
+export const PROMETHEUS_TRENDS = {
+  'hyeja:http_requests:rate5m{application="gateway-service"}': [
+    [0, '2'],
+    [30, '1.5'],
+  ],
+  'hyeja:http_latency_seconds:p95{application="gateway-service"}': [
+    [0, '0.246'],
+    [30, '0.123'],
+  ],
+  'hyeja:http_5xx:ratio5m{application="gateway-service"}': [
+    [0, '0.03'],
+    [30, '0.015'],
+  ],
+};
+export const prometheusRangeResponse = (values = []) => ({
+  status: 'success',
+  data: { resultType: 'matrix', result: [{ metric: {}, values }] },
+});

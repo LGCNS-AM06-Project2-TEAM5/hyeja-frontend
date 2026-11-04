@@ -23,6 +23,83 @@ const QUERIES = {
 const FAILED = '불러오지 못했어요';
 const MEASURING = '측정 중';
 
+export const TREND_QUERIES = {
+  rate: 'hyeja:http_requests:rate5m{application="gateway-service"}',
+  latency: 'hyeja:http_latency_seconds:p95{application="gateway-service"}',
+  errors: 'hyeja:http_5xx:ratio5m{application="gateway-service"}',
+};
+
+export const queryPrometheusRange = async (baseUrl, query, { start, end, step }) => {
+  // 범위 조회에도 서비스 JWT를 보내지 않는다.
+  const { data } = await axios.get(`${baseUrl.replace(/\/$/, '')}/api/v1/query_range`, {
+    params: { query, start, end, step },
+    timeout: 8000,
+    withCredentials: false,
+  });
+  const result = data?.data?.result;
+  if (
+    data?.status !== 'success' ||
+    data.data?.resultType !== 'matrix' ||
+    !Array.isArray(result) ||
+    result.some(
+      (item) =>
+        !Array.isArray(item.values) ||
+        item.values.some(
+          (point) => !Array.isArray(point) || point.length !== 2 || !Number.isFinite(point[0]),
+        ),
+    )
+  ) {
+    throw new Error('모니터링 응답을 읽지 못했어요');
+  }
+  return result.map(({ metric, values }) => ({
+    metric,
+    values: values.map(([t, value]) => ({
+      t,
+      v:
+        typeof value === 'string' &&
+        value.trim() !== '' &&
+        Number.isFinite(Number(value)) &&
+        Number(value) >= 0
+          ? Number(value)
+          : null,
+    })),
+  }));
+};
+
+export const getServiceTrends = async (now = Date.now()) => {
+  const baseUrl = import.meta.env.VITE_PROMETHEUS_URL?.trim();
+  if (!baseUrl) return null;
+  const end = Math.floor(now / 1000);
+  const entries = Object.entries(TREND_QUERIES);
+  const results = await Promise.allSettled(
+    entries.map(([, query]) =>
+      queryPrometheusRange(baseUrl, query, { start: end - 900, end, step: 30 }),
+    ),
+  );
+  return Object.fromEntries(
+    entries.map(([key], index) => [
+      key,
+      results[index].status === 'fulfilled' ? (results[index].value[0]?.values ?? []) : null,
+    ]),
+  );
+};
+
+export const toTrendSummary = (points, kind) => {
+  const format = (value) =>
+    !Number.isFinite(value) || value < 0
+      ? MEASURING
+      : kind === 'rate'
+        ? `${value.toFixed(1)}회/초`
+        : kind === 'latency'
+          ? `${Math.round(value * 1000)}ms`
+          : `${(value * 100).toFixed(1)}%`;
+  const values = (points ?? []).map(({ v }) => v).filter((v) => Number.isFinite(v) && v >= 0);
+  return {
+    current: format(points?.at(-1)?.v),
+    max: format(values.length ? Math.max(...values) : null),
+  };
+};
+
 const queryPrometheus = async (baseUrl, query) => {
   // 서비스 JWT가 모니터링 서버로 전달되지 않도록 httpClient를 쓰지 않는다.
   const { data } = await axios.get(`${baseUrl.replace(/\/$/, '')}/api/v1/query`, {

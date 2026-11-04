@@ -16,6 +16,7 @@ import Typography from '@mui/material/Typography';
 import * as adminApi from '@/api/adminApi';
 import {
   getServiceStatus,
+  getServiceTrends,
   toGatewaySummary,
   toServiceRows,
   toFeignRows,
@@ -23,6 +24,7 @@ import {
   toResilienceRows,
 } from '@/api/prometheusApi';
 import EventPipeline from '@/components/admin/EventPipeline';
+import TrendChart from '@/components/admin/TrendChart';
 import PolicyEventStatusCard from '@/components/admin/PolicyEventStatusCard';
 import AppIcon from '@/components/common/AppIcon';
 import { ADMIN_TROUBLESHOOTING } from '@/constants/adminTroubleshooting';
@@ -51,6 +53,7 @@ function AdminPage() {
   const [isCollecting, setIsCollecting] = useState(false);
   const [tab, setTab] = useState(0);
   const [reloadToken, setReloadToken] = useState(0);
+  const [trends, setTrends] = useState({ data: undefined, isLoading: true });
   const [monitoring, setMonitoring] = useState({
     metrics: undefined,
     events: undefined,
@@ -59,6 +62,7 @@ function AdminPage() {
   });
 
   const reload = useCallback(() => {
+    setTrends((previous) => ({ ...previous, isLoading: true }));
     setMonitoring((previous) => ({ ...previous, isLoading: true }));
     setReloadToken((previous) => previous + 1);
   }, []);
@@ -88,6 +92,15 @@ function AdminPage() {
     adminApi.getPolicyEventStatus().then(
       (events) => update({ events: events ?? null, eventsError: '' }),
       (error) => update({ events: null, eventsError: getErrorMessage(error) }),
+    );
+    getServiceTrends().then(
+      (data) => {
+        if (isActive) setTrends({ data, isLoading: false });
+      },
+      () => {
+        if (isActive)
+          setTrends({ data: { rate: null, latency: null, errors: null }, isLoading: false });
+      },
     );
     return () => {
       isActive = false;
@@ -213,6 +226,34 @@ function AdminPage() {
       </Tabs>
 
       <Box role="tabpanel" id="admin-panel-0" aria-labelledby="admin-tab-0" hidden={tab !== 0}>
+        {trends.data === null ? (
+          <Typography color="text.secondary" sx={{ mb: 3 }}>
+            측정 전
+          </Typography>
+        ) : (
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' },
+              gap: 2,
+              mb: 3,
+            }}
+          >
+            {[
+              ['rate', '요청 수 (Gateway)'],
+              ['latency', '응답 시간 p95'],
+              ['errors', '5xx 비율'],
+            ].map(([kind, title]) => (
+              <TrendChart
+                key={kind}
+                title={title}
+                kind={kind}
+                points={trends.data?.[kind]}
+                isLoading={trends.isLoading}
+              />
+            ))}
+          </Box>
+        )}
         <Card variant="outlined" sx={{ p: 2 }}>
           <Stack spacing={2}>
             <Stack
